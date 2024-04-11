@@ -1,33 +1,34 @@
 ﻿namespace SDMU;
+
 internal class AppTypes
 {
-    public enum baseApps
+    public static Dictionary<string, Func<Task>> BaseApps { get; } = new()
     {
-        Aroma, // Modern Aroma Environment with Plugins
-        Tiramisu // Legacy Tiramisu Environment
-    }
+        ["Aroma"] = Downloader.DownloadAroma,
+        ["Tiramisu"] = Downloader.DownloadTiramisu
+    };
 
-    public enum aromaPlugins
+    public static List<string> AromaPlugins { get; } = new()
     {
-        Padcon, // Gamepad Stuff
-        sdcafiine, // On Demand File Replacer
-        SwipSwapMe, // Swap DRC
-        Inkay, // Pretendo 
-        HaltFix, // BSOD Thing on PPCHALT
-        Screenshot // Screenshot Service
-    }
+        "Padcon",
+        "sdcafiine",
+        "SwipSwapMe",
+        "Inkay",
+        "HaltFix",
+        "Screenshot"
+    };
 
-    public enum extraApps
+    public static List<string> ExtraApps { get; } = new()
     {
-        SaveMii, // Save File Manager
-        Bloopair, // Bluetooth Controllers
-        Dumpling, // Disc Dumper
-        NUSspli, // WUP / NUS Downloader
-        WUDD, // Disc Dumper
-        WiiUIdent, // Hardware Identifier
-        envSwap, // Swap between Aroma and Tiramisu environments
-        WiiUReboot, // Reboot Console App
-        WiiUScreenshotManager // Screenshot Manager
-    }
+        "SaveMii",
+        "Bloopair",
+        "Dumpling",
+        "NUSspli",
+        "WUDD",
+        "WiiUIdent",
+        "envSwap",
+        "WiiUReboot",
+        "WiiUScreenshotManager"
+    };
 
 }

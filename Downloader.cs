@@ -1,42 +1,111 @@
 ﻿using Spectre.Console;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace SDMU;
 
 internal class Package
 {
-    public string? Category;
-    public string? Name;
-    public string? Updated;
-    public string? URL;
-    public string? md5;
+    [JsonPropertyName("category")]
+    public string Category { get; set; }
+
+    [JsonPropertyName("binary")]
+    public string Binary { get; set; }
+
+    [JsonPropertyName("updated")]
+    public string Updated { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("license")]
+    public string License { get; set; }
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; }
+
+    [JsonPropertyName("url")]
+    public string Url { get; set; }
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; }
+
+    [JsonPropertyName("author")]
+    public string Author { get; set; }
+
+    [JsonPropertyName("changelog")]
+    public string Changelog { get; set; }
+
+    [JsonPropertyName("screens")]
+    public int Screens { get; set; }
+
+    [JsonPropertyName("extracted")]
+    public int Extracted { get; set; }
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; }
+
+    [JsonPropertyName("filesize")]
+    public int Filesize { get; set; }
+
+    [JsonPropertyName("details")]
+    public string Details { get; set; }
+
+    [JsonPropertyName("app_dls")]
+    public int AppDls { get; set; }
+
+    [JsonPropertyName("md5")]
+    public string Md5 { get; set; }
 }
+
+internal class RootObject
+{
+    [JsonPropertyName("packages")]
+    public IEnumerable<Package> Packages { get; set; }
+}
+
 
 internal class Downloader
 {
-    string _repo = "https://wiiu.cdn.fortheusers.org/repo.json";
-    string _dlRepo = "https://wiiu.cdn.fortheusers.org/zips/";
+    static string _repo = "https://wiiu.cdn.fortheusers.org/repo.json";
+    static string _dlRepo = "https://wiiu.cdn.fortheusers.org/zips/";
 
-    string _downloadPath = Path.GetTempPath();
+    static string _downloadPath = Path.GetTempPath();
 
-    Package[]? repoPackages;
-
-    public async void GetPackages()
+    internal static async Task<Package[]> GetPackages()
     {
         var client = new HttpClient();
         var json = await client.GetStringAsync(_repo);
-        var packages = JsonSerializer.Deserialize<List<Package>>(json);
 
-        if (packages is null)
+        RootObject root = JsonSerializer.Deserialize<RootObject>(json);
+
+        if (root is null)
         {
-            throw new Exception("Failed to download packages!");
+            throw new Exception("Failed to get packages!");
         }
 
-        repoPackages = [.. packages];
+        if (root.Packages is null)
+        {
+            throw new Exception("No packages found!");
+        }
+        return root.Packages.ToArray();
     }
 
-    public async void DownloadPackage(Package package)
+    internal static async Task DownloadPackage(string packageName)
     {
+        if (SDManager._targetDrive is null)
+        {
+            throw new Exception("No target drive found!");
+        }
+
+        var packages = await GetPackages();
+        var package = packages.FirstOrDefault(x => x.Name.ToLower() == packageName.ToLower());
+
+        if (package is null)
+        {
+            throw new Exception("Package not found!");
+        }
+
         AnsiConsole.MarkupLine($"Downloading [bold]{package.Name}[/]...");
 
         var client = new HttpClient();
@@ -46,7 +115,7 @@ internal class Downloader
         FileManager.ExtractZip($"{package.Name}.zip", SDManager._targetDrive.Name);
     }
 
-    public async Task DownloadAroma()
+    internal static async Task DownloadAroma()
     {
         AnsiConsole.MarkupLine("Downloading Aroma...");
 
@@ -80,7 +149,7 @@ internal class Downloader
         File.Delete(aromaPayloadsPath);
     }
 
-    public async Task DownloadTiramisu()
+    internal static async Task DownloadTiramisu()
     {
         AnsiConsole.MarkupLine("Downloading Tiramisu...");
 
@@ -104,4 +173,5 @@ internal class Downloader
 
         File.Delete(tiramisuPath);
     }
+
 }

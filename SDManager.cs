@@ -32,22 +32,35 @@ public static class SDManager
 
     internal static void FormatSDCard()
     {
-        Console.WriteLine($"Formatting {_targetDrive.Name}...");
-        // CMD Command: format {_targetDrive.Name} /FS:FAT32 /V:WIIU_SD /Q /X | then exit
-        System.Diagnostics.Process process = new System.Diagnostics.Process();
-        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
-        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-        startInfo.FileName = "cmd.exe";
-        var name = _targetDrive.Name.Remove(_targetDrive.Name.Length - 1);
-        startInfo.Arguments = $"/C format {name} /FS:FAT32 /V:HBSD /Q /X /y";
-        process.StartInfo = startInfo;
-        process.Start();
-        process.WaitForExit();
-        if (process.ExitCode != 0)
-        {
-            throw new Exception("Failed to format the SD Card!");
-        }
+        AnsiConsole.Status()
+            .Start($"Formatting {_targetDrive.Name}...", ctx =>
+            {
+                ctx.Spinner(Spinner.Known.Dots);
+
+                // CMD Command: format {_targetDrive.Name} /FS:FAT32 /V:WIIU_SD /Q /X | then exit
+                System.Diagnostics.Process process = new System.Diagnostics.Process();
+                System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
+                startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+                startInfo.FileName = "cmd.exe";
+                var name = _targetDrive.Name.Remove(_targetDrive.Name.Length - 1);
+                startInfo.Arguments = $"/C format {name} /FS:FAT32 /V:HBSD /Q /X /y";
+
+                // Redirect standard output and error streams to null
+                startInfo.RedirectStandardOutput = true;
+                startInfo.RedirectStandardError = true;
+                startInfo.UseShellExecute = false;
+
+                process.StartInfo = startInfo;
+                process.Start();
+                process.WaitForExit();
+                if (process.ExitCode != 0)
+                {
+                    ctx.Spinner(Spinner.Known.Default); // Stop the spinner
+                    throw new Exception("Failed to format the SD Card!");
+                }
+            });
     }
+
 
     internal static bool IsHomebrewPresent()
     { // Checks if the homebrew folder is present on the SD Card
@@ -61,14 +74,8 @@ public static class SDManager
 
     internal static DriveInfo DetermineTargetDrive()
     {
-        var table = new Table();
-        table.AddColumn("Drive");
-        table.AddColumn("Type");
-        table.AddColumn("Format");
-        table.AddColumn("Size");
-        table.AddColumn("Free Space");
-
-        AnsiConsole.MarkupLine("Checking for removable media...");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Checking for removable media...[/]");
 
         var drives = _sdCardPath();
         if (drives.Length < 1)
@@ -77,28 +84,18 @@ public static class SDManager
             throw new Exception("No removable media found!");
         }
 
-        foreach (var drive in drives)
-        {
-            if (drive is null)
-            {
-                continue;
-            }
-
-            table.AddRow(drive.Name, drive.DriveType.ToString(), drive.DriveFormat, $"{(drive.TotalSize / 1000000000).ToString()} GB", $"{(drive.AvailableFreeSpace / 1000000000).ToString()} GB");
-        }
-        AnsiConsole.Write(table);
-        // 
-
-        // Step 2: Ask user to select a drive
+        // Prompt the user to select a drive
         SelectionPrompt<DriveInfo> drivePrompt = new SelectionPrompt<DriveInfo>()
-            .Title("Which drive would you like to use?")
+            .Title("Please select a drive:")
             .PageSize(10)
             .MoreChoicesText("[grey](Move up and down to reveal more drives)[/]")
-            .AddChoices(drives);
+            .AddChoices(drives)
+            .UseConverter(drive => $"[yellow]{drive.Name}[/] [grey]({drive.DriveType}, {drive.DriveFormat}, {drive.TotalSize / 1000000000} GB, {drive.AvailableFreeSpace / 1000000000} GB free)[/]");
 
         _targetDrive = AnsiConsole.Prompt(drivePrompt);
-        AnsiConsole.MarkupLine($"[green]Selected drive: {_targetDrive.Name}[/]");
-        //
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold green]Selected drive: {_targetDrive.Name}[/]");
 
         return _targetDrive;
     }

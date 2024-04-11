@@ -1,6 +1,6 @@
 ﻿using SDMU;
 using Spectre.Console;
-AnsiConsole.Markup("Welcome to [cyan]SDMU![/]\n");
+AnsiConsole.MarkupLine("[cyan]Welcome to SDMU![/]\n");
 
 // Step 1: SD Card Preperations
 SDManager.DetermineTargetDrive();
@@ -25,20 +25,49 @@ if (formatRequest)
 
 // Step 5: Ask the user if they want Aroma or Tiramisu or both
 var baseApps = AnsiConsole.Prompt(new MultiSelectionPrompt<string>()
-       .Title("Which Custom Firmware would you like to install?")
+       .Title("[yellow]Which Custom Firmware would you like to install?[/]")
        .PageSize(10)
-       .AddChoices(Enum.GetNames(typeof(AppTypes.baseApps))));
+       .AddChoices(AppTypes.BaseApps.Keys));
 
 // Step 6: Ask the user if they want other homebrew apps installed
-var extraApps = AnsiConsole.Prompt(new MultiSelectionPrompt<AppTypes.extraApps>()
-       .Title("Which additional applications would you like to install?")
+var extraApps = AnsiConsole.Prompt(new MultiSelectionPrompt<string>()
+       .Title("[yellow]Which additional applications would you like to install?[/]")
        .PageSize(10)
-       .AddChoices(Enum.GetValues(typeof(AppTypes.extraApps)).Cast<AppTypes.extraApps>()));
+       .AddChoices(AppTypes.ExtraApps)
+       .NotRequired());
 
-// Step 7: Get HB Repository
-var downloader = new Downloader();
-// downloader.GetPackages();
+// Step 7: Download and install the selected base apps
+foreach (var app in baseApps)
+{
+    if (AppTypes.BaseApps.TryGetValue(app, out var action))
+    {
+        AnsiConsole.Status()
+            .Start($"Downloading {app}", ctx =>
+            {
+                ctx.Spinner(Spinner.Known.Star);
+                action().Wait();
+            });
+    }
+    else
+    {
+        AnsiConsole.MarkupLine($"[red]Failed to download {app}![/]");
+    }
+}
 
-// Step 8: Download and install base apps
-await downloader.DownloadTiramisu();
-await downloader.DownloadAroma();
+// Step 8: Download and install the selected extra apps
+foreach (var app in extraApps)
+{
+    if (AppTypes.ExtraApps.Contains(app))
+    {
+        AnsiConsole.Status()
+            .Start($"Downloading {app}", ctx =>
+            {
+                ctx.Spinner(Spinner.Known.Star);
+                Downloader.DownloadPackage(app).Wait();
+            });
+    }
+    else
+    {
+        AnsiConsole.MarkupLine($"[red]Failed to download {app}![/]");
+    }
+}
