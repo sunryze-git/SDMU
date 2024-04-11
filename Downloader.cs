@@ -1,5 +1,4 @@
-﻿using Spectre.Console;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace SDMU;
@@ -91,6 +90,14 @@ internal class Downloader
         return root.Packages.ToArray();
     }
 
+    internal static async Task<Package[]> GetPackagesByCategory(string category)
+    {
+        var packages = await GetPackages();
+        var categoryPackages = packages.Where(x => x.Category.ToLower() == category.ToLower());
+
+        return categoryPackages.ToArray();
+    }
+
     internal static async Task DownloadPackage(string packageName)
     {
         if (SDManager._targetDrive is null)
@@ -106,8 +113,6 @@ internal class Downloader
             throw new Exception("Package not found!");
         }
 
-        AnsiConsole.MarkupLine($"Downloading [bold]{package.Name}[/]...");
-
         var client = new HttpClient();
         var zip = await client.GetByteArrayAsync($"{_dlRepo}{package.Name}.zip");
         File.WriteAllBytes($"{package.Name}.zip", zip);
@@ -117,7 +122,6 @@ internal class Downloader
 
     internal static async Task DownloadAroma()
     {
-        AnsiConsole.MarkupLine("Downloading Aroma...");
 
         var aromaPaylodsURL = "https://aroma.foryour.cafe/api/download?packages=environmentloader,wiiu-nanddumper-payload";
         var aromaBaseURL = "https://github.com/wiiu-env/Aroma/releases/download/beta-16/aroma-beta-16.zip";
@@ -151,8 +155,6 @@ internal class Downloader
 
     internal static async Task DownloadTiramisu()
     {
-        AnsiConsole.MarkupLine("Downloading Tiramisu...");
-
         var tiramisuDL = "https://github.com/wiiu-env/Tiramisu/releases/download/v0.1.2/environmentloader-28332a7+wiiu-nanddumper-payload-5c5ec09+fw_img_loader-c2da326.zip";
 
         if (SDManager._targetDrive is null)

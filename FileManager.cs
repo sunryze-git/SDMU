@@ -5,7 +5,6 @@ internal class FileManager
 {
     internal static void ExtractZip(string zipPath, string extractPath)
     {
-        AnsiConsole.MarkupLine($"Extracting [bold green]{zipPath}[/] --> [bold blue]{extractPath}[/]");
         // Extract the zip file
         System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath, true);
     }
