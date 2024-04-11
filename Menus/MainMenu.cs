@@ -1,12 +1,22 @@
-﻿using SDMU;
+﻿using SDMU.Menus;
+using SDMU.Utilities;
 using Spectre.Console;
 
 internal static class MainMenu
 {
     public static void Show()
     {
+        SDManager.DetermineTargetDrive();
+
         while (true)
         {
+            Console.Clear();
+
+            AnsiConsole.Write(
+            new FigletText("Welcome to SDMU!")
+                .Centered()
+                .Color(Color.LightSteelBlue));
+
             var homebrewDetected = SDManager.IsHomebrewPresent();
             var mainMenuItems = new List<(string Name, string Id)>();
 
@@ -29,9 +39,8 @@ internal static class MainMenu
             // Common items
             mainMenuItems.AddRange(new[]
             {
-                ("Backup SD Card", "backup"),
-                ("Restore SD Card", "restore"),
-                ("Cleanup SD Card", "cleanup"),
+                ("Manage Applications", "appmenu"),
+                ("Manage SD Card", "sdmenu"),
                 (" ", "spacer2"), // Another spacer
                 ("Exit", "exit")
             });
@@ -64,14 +73,11 @@ internal static class MainMenu
             case "update":
                 HBManager.UpdateHomebrew();
                 break;
-            case "backup":
-                HBManager.BackupSDCard();
+            case "appmenu":
+                AppMenu.Show();
                 break;
-            case "restore":
-                HBManager.RestoreSDCard();
-                break;
-            case "cleanup":
-                HBManager.CleanupSDCard();
+            case "sdmenu":
+                SDMenu.Show();
                 break;
             default:
                 AnsiConsole.WriteLine("Invalid selection.");

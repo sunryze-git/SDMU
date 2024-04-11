@@ -1,13 +1,10 @@
 ﻿using Spectre.Console;
 
-namespace SDMU;
+namespace SDMU.Utilities;
 internal class HBManager
 {
     public static void InstallHomebrew()
     {
-        // SD Card Preperations
-        SDManager.DetermineTargetDrive();
-
         // Ask user if they would like to format the SD Card
         var formatRequest = AnsiConsole.Confirm("This media will need to be [red]formatted.[/] Is this okay?");
         if (formatRequest)
@@ -80,18 +77,32 @@ internal class HBManager
 
     public static void BackupSDCard()
     {
-
+        SDManager.DetermineTargetDrive();
+        FileManager.BackupMedia();
+        AnsiConsole.MarkupLine("[#5D8AA8]Backup completed successfully.[/]");
+        Thread.Sleep(5000);
     }
 
     public static void RestoreSDCard()
     {
-
+        SDManager.DetermineTargetDrive();
+        FileManager.RestoreMedia();
+        AnsiConsole.MarkupLine("[#5D8AA8]Restore completed successfully.[/]");
+        Thread.Sleep(5000);
     }
 
     public static void CleanupSDCard()
     {
-
+        // Not Implimented yet
+        // Will provide a list of WUPS that are not installed (like in wiiu\install)
+        // Will also ask about backups on the SD card and if you would like to move them to PC
     }
 
-
+    public static void FormatSDCard()
+    {
+        SDManager.DetermineTargetDrive();
+        SDManager.FormatSDCard();
+        AnsiConsole.MarkupLine("[#5D8AA8]Format completed successfully.[/]");
+        Thread.Sleep(5000);
+    }
 }

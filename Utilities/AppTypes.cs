@@ -1,4 +1,4 @@
-﻿namespace SDMU;
+﻿namespace SDMU.Utilities;
 
 internal class AppTypes
 {

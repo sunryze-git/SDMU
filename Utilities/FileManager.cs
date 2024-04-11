@@ -1,6 +1,6 @@
 ﻿using Spectre.Console;
 
-namespace SDMU;
+namespace SDMU.Utilities;
 internal class FileManager
 {
     internal static void ExtractZip(string zipPath, string extractPath)
@@ -57,5 +57,56 @@ internal class FileManager
         var targetDirectory = $"{parentBackupFolder}\\{backupName}\\";
 
         CopyFiles(targetDrive, targetDirectory);
+    }
+
+    internal static void RestoreMedia()
+    {
+        var targetDrive = SDManager._targetDrive?.Name;
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        var parentBackupFolder = $"{documents}\\SDMU_Backup\\";
+        var backupFolders = Directory.GetDirectories(parentBackupFolder);
+
+        // Null Checking
+        if (targetDrive is null)
+        {
+            AnsiConsole.MarkupLine("[red]No target drive found![/]");
+            return;
+        }
+
+        // Ask user to select a backup to restore
+        var selectedBackup = AnsiConsole.Prompt(new SelectionPrompt<string>()
+                       .Title("[yellow]Select a backup to restore:[/]")
+                       .PageSize(10)
+                       .AddChoices(backupFolders));
+
+        // Format SD Card
+        SDManager.FormatSDCard();
+
+        // Copy files from backup to SD Card
+        CopyFiles(selectedBackup, targetDrive);
+    }
+
+    internal static string GetBackupsDirectory()
+    {
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        return $"{documents}\\SDMU_Backup\\";
+    }
+
+    internal static void DeleteBackup()
+    {
+        var backupsDir = GetBackupsDirectory();
+        var backupFolders = Directory.GetDirectories(backupsDir);
+
+        var prompt = new SelectionPrompt<string>()
+            .Title("[yellow]Select a backup to delete:[/]")
+            .PageSize(10)
+            .AddChoices(backupFolders);
+
+        var selectedBackup = AnsiConsole.Prompt(prompt);
+
+        Directory.Delete(selectedBackup, true);
+
+        AnsiConsole.MarkupLine("[bold green]Backup deleted![/]");
+        Thread.Sleep(2000);
     }
 }

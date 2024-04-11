@@ -8,7 +8,7 @@
 
 using Spectre.Console;
 
-namespace SDMU;
+namespace SDMU.Utilities;
 public static class SDManager
 {
     public static DriveInfo? _targetDrive;

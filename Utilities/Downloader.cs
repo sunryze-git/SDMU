@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SDMU;
+namespace SDMU.Utilities;
 
 internal class Package
 {
@@ -71,6 +71,62 @@ internal class Downloader
 
     static string _downloadPath = Path.GetTempPath();
 
+    private static void WriteMetadata(Package package)
+    {
+        var json = JsonSerializer.Serialize(package);
+        var targetDrive = SDManager._targetDrive?.Name;
+
+        if (targetDrive is null)
+        {
+            throw new Exception("No target drive found!");
+        }
+
+        var metadataPath = $"{targetDrive}\\metadata";
+
+        // Create path if not exist
+        if (!Directory.Exists(metadataPath))
+        {
+            Directory.CreateDirectory(metadataPath);
+        }
+
+        File.WriteAllText($"{metadataPath}\\{package.Name}.json", json);
+    }
+
+    internal static Package[] GetInstalledPackages()
+    {
+        var metadataPath = $"{SDManager._targetDrive?.Name}\\metadata";
+
+        if (metadataPath is null)
+        {
+            throw new Exception("No target drive found!");
+        }
+
+        if (!Directory.Exists(metadataPath))
+        {
+            // No applications installed
+            return Array.Empty<Package>();
+        }
+
+        var metadataFiles = Directory.GetFiles(metadataPath, "*.json");
+
+        if (metadataFiles.Length == 0)
+        {
+            throw new Exception("No metadata found!");
+        }
+
+        List<Package> packages = new();
+
+        foreach (var file in metadataFiles)
+        {
+            var json = File.ReadAllText(file);
+            var package = JsonSerializer.Deserialize<Package>(json);
+
+            packages.Add(package);
+        }
+
+        return packages.ToArray();
+    }
+
     internal static async Task<Package[]> GetPackages()
     {
         var client = new HttpClient();
@@ -118,6 +174,8 @@ internal class Downloader
         File.WriteAllBytes($"{package.Name}.zip", zip);
 
         FileManager.ExtractZip($"{package.Name}.zip", SDManager._targetDrive.Name);
+
+        WriteMetadata(package);
     }
 
     internal static async Task DownloadAroma()
@@ -175,5 +233,4 @@ internal class Downloader
 
         File.Delete(tiramisuPath);
     }
-
 }
