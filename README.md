@@ -43,7 +43,7 @@ Contributions are welcome! If you'd like to contribute to SDMU, feel free to for
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE.txt).
 
 ## Acknowledgements
 
