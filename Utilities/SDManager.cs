@@ -74,13 +74,9 @@ public static class SDManager
 
     internal static DriveInfo DetermineTargetDrive()
     {
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold]Checking for removable media...[/]");
-
         var drives = _sdCardPath();
         if (drives.Length < 1)
         {
-            AnsiConsole.MarkupLine("[red]No removable media found![/]");
             throw new Exception("No removable media found!");
         }
 
@@ -93,10 +89,6 @@ public static class SDManager
             .UseConverter(drive => $"[yellow]{drive.Name}[/] [grey]({drive.DriveType}, {drive.DriveFormat}, {drive.TotalSize / 1000000000} GB, {drive.AvailableFreeSpace / 1000000000} GB free)[/]");
 
         _targetDrive = AnsiConsole.Prompt(drivePrompt);
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[bold green]Selected drive: {_targetDrive.Name}[/]");
-
         return _targetDrive;
     }
 }
