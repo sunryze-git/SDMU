@@ -1,13 +1,15 @@
 # SDMU (SD Manager (Wii) U)
 
+![screenshot](image.png)
+
 SDMU is a C# application designed to simplify the management and setup of Wii U Homebrew. With SDMU, users can effortlessly handle tasks such as backing up, cleaning, and restoring their SD card, as well as downloading and updating SD card files without requiring their console to be online. Additionally, SDMU provides the functionality to install packages from the Homebrew App Store directly from your PC and manage NAND backups.
 
 ## Features
 
 - **SD Card Management:** Easily create backups, clean up, and restore your SD card contents.
-- **Offline File Updates:** Download and update SD card files without needing to use Wii U.
+- **Offline File Updates:** Download and update SD card files without needing to use Wii U. (*Can only update Applications at the moment*)
 - **Homebrew App Store Integration:** Install packages from the Homebrew App Store directly to your SD Card from your PC.
-- **NAND Backup Management:** Manage NAND backups effortlessly to reduce SD Card space usage.
+- ~~**NAND Backup Management:** Manage NAND backups effortlessly to reduce SD Card space usage.~~ *Not Implimented Yet*
 
 ## Installation
 
