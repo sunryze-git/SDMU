@@ -1,4 +1,5 @@
-﻿using Spectre.Console;
+﻿using SDMU.NewFramework;
+using Spectre.Console;
 
 namespace SDMU.Utilities;
 internal class FileManager
@@ -39,7 +40,7 @@ internal class FileManager
 
     internal static void BackupMedia()
     {
-        var targetDrive = SDManager._targetDrive?.Name;
+        var targetDrive = MediaDevice.Device?.Name;
         var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var parentBackupFolder = $"{documents}\\SDMU_Backup\\";
 
@@ -61,7 +62,7 @@ internal class FileManager
 
     internal static void RestoreMedia()
     {
-        var targetDrive = SDManager._targetDrive?.Name;
+        var targetDrive = MediaDevice.Device?.Name;
         var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var parentBackupFolder = $"{documents}\\SDMU_Backup\\";
         var backupFolders = Directory.GetDirectories(parentBackupFolder);
@@ -80,7 +81,7 @@ internal class FileManager
                        .AddChoices(backupFolders));
 
         // Format SD Card
-        SDManager.FormatSDCard();
+        MediaDevice.Format();
 
         // Copy files from backup to SD Card
         CopyFiles(selectedBackup, targetDrive);

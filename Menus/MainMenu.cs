@@ -1,4 +1,5 @@
 ﻿using SDMU.Menus;
+using SDMU.NewFramework;
 using SDMU.Utilities;
 using Spectre.Console;
 
@@ -25,11 +26,11 @@ internal static class MainMenu
 
             if (!homebrewDetected)
             {
-                SDManager.DetermineTargetDrive();
+                new MediaDevice();
             }
-            AnsiConsole.MarkupLine($"[yellow]SD Card: {SDManager._targetDrive?.Name}[/]\n");
+            AnsiConsole.MarkupLine($"[yellow]SD Card: {MediaDevice.Device?.Name}[/]\n");
 
-            homebrewDetected = SDManager.IsHomebrewPresent();
+            homebrewDetected = MediaDevice.HasHomebrew;
             var mainMenuItems = new List<(string Name, string Id)>();
 
             // Conditional items based on Homebrew detection

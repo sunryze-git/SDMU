@@ -1,4 +1,5 @@
-﻿using Spectre.Console;
+﻿using SDMU.NewFramework;
+using Spectre.Console;
 
 namespace SDMU.Utilities;
 internal class HBManager
@@ -9,7 +10,7 @@ internal class HBManager
         var formatRequest = AnsiConsole.Confirm("This media will need to be [red]formatted.[/] Is this okay?");
         if (formatRequest)
         {
-            SDManager.FormatSDCard();
+            MediaDevice.Format();
         }
         else
         {
@@ -77,7 +78,6 @@ internal class HBManager
 
     public static void BackupSDCard()
     {
-        SDManager.DetermineTargetDrive();
         FileManager.BackupMedia();
         AnsiConsole.MarkupLine("[#5D8AA8]Backup completed successfully.[/]");
         Thread.Sleep(5000);
@@ -85,7 +85,6 @@ internal class HBManager
 
     public static void RestoreSDCard()
     {
-        SDManager.DetermineTargetDrive();
         FileManager.RestoreMedia();
         AnsiConsole.MarkupLine("[#5D8AA8]Restore completed successfully.[/]");
         Thread.Sleep(5000);
@@ -100,8 +99,7 @@ internal class HBManager
 
     public static void FormatSDCard()
     {
-        SDManager.DetermineTargetDrive();
-        SDManager.FormatSDCard();
+        MediaDevice.Format();
         AnsiConsole.MarkupLine("[#5D8AA8]Format completed successfully.[/]");
         Thread.Sleep(5000);
     }

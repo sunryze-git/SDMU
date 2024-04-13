@@ -1,4 +1,6 @@
 ﻿namespace SDMU.Menus;
+
+using SDMU.NewFramework;
 using SDMU.Utilities;
 using Spectre.Console;
 
@@ -11,7 +13,7 @@ internal class AppMenu
             Console.Clear();
 
             // Get list of applications installed
-            var apps = Downloader.GetInstalledPackages();
+            var apps = MediaDevice.InstalledPackages;
 
             var appTable = new Table();
             appTable.AddColumn("Name");
@@ -93,6 +95,7 @@ internal class AppMenu
                 }
                 break;
             case "update":
+                Updater.ComparePackageHash();
                 break;
             case "uninstall":
                 break;

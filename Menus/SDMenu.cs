@@ -1,4 +1,5 @@
-﻿using SDMU.Utilities;
+﻿using SDMU.NewFramework;
+using SDMU.Utilities;
 using Spectre.Console;
 
 namespace SDMU.Menus;
@@ -79,7 +80,7 @@ internal class SDMenu
                 FileManager.DeleteBackup();
                 break;
             case "format":
-                SDManager.FormatSDCard();
+                MediaDevice.Format();
                 AnsiConsole.MarkupLine("[bold green]SD Card formatted![/]");
                 Thread.Sleep(2000);
                 break;

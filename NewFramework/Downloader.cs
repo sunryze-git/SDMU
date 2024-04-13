@@ -1,39 +1,40 @@
-﻿using System.Text.Json;
+﻿using SDMU.Utilities;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SDMU.Utilities;
+namespace SDMU.NewFramework;
 
 internal class Package
 {
     [JsonPropertyName("category")]
-    public string Category { get; set; }
+    public string? Category { get; set; }
 
     [JsonPropertyName("binary")]
-    public string Binary { get; set; }
+    public string? Binary { get; set; }
 
     [JsonPropertyName("updated")]
-    public string Updated { get; set; }
+    public string? Updated { get; set; }
 
     [JsonPropertyName("name")]
-    public string Name { get; set; }
+    public string? Name { get; set; }
 
     [JsonPropertyName("license")]
-    public string License { get; set; }
+    public string? License { get; set; }
 
     [JsonPropertyName("title")]
-    public string Title { get; set; }
+    public string? Title { get; set; }
 
     [JsonPropertyName("url")]
-    public string Url { get; set; }
+    public string? Url { get; set; }
 
     [JsonPropertyName("description")]
-    public string Description { get; set; }
+    public string? Description { get; set; }
 
     [JsonPropertyName("author")]
-    public string Author { get; set; }
+    public string? Author { get; set; }
 
     [JsonPropertyName("changelog")]
-    public string Changelog { get; set; }
+    public string? Changelog { get; set; }
 
     [JsonPropertyName("screens")]
     public int Screens { get; set; }
@@ -42,39 +43,39 @@ internal class Package
     public int Extracted { get; set; }
 
     [JsonPropertyName("version")]
-    public string Version { get; set; }
+    public string? Version { get; set; }
 
     [JsonPropertyName("filesize")]
     public int Filesize { get; set; }
 
     [JsonPropertyName("details")]
-    public string Details { get; set; }
+    public string? Details { get; set; }
 
     [JsonPropertyName("app_dls")]
     public int AppDls { get; set; }
 
     [JsonPropertyName("md5")]
-    public string Md5 { get; set; }
+    public string? Md5 { get; set; }
 }
 
 internal class RootObject
 {
     [JsonPropertyName("packages")]
-    public IEnumerable<Package> Packages { get; set; }
+    public IEnumerable<Package>? Packages { get; set; }
 }
 
 
 internal class Downloader
 {
-    static string _repo = "https://wiiu.cdn.fortheusers.org/repo.json";
-    static string _dlRepo = "https://wiiu.cdn.fortheusers.org/zips/";
+    private readonly static string _repo = "https://wiiu.cdn.fortheusers.org/repo.json";
+    private readonly static string _dlRepo = "https://wiiu.cdn.fortheusers.org/zips/";
 
-    static string _downloadPath = Path.GetTempPath();
+    private static string _downloadPath = Path.GetTempPath();
 
     private static void WriteMetadata(Package package)
     {
         var json = JsonSerializer.Serialize(package);
-        var targetDrive = SDManager._targetDrive?.Name;
+        var targetDrive = MediaDevice.Device?.Name;
 
         if (targetDrive is null)
         {
@@ -92,47 +93,12 @@ internal class Downloader
         File.WriteAllText($"{metadataPath}\\{package.Name}.json", json);
     }
 
-    internal static Package[] GetInstalledPackages()
-    {
-        var metadataPath = $"{SDManager._targetDrive?.Name}\\metadata";
-
-        if (metadataPath is null)
-        {
-            throw new Exception("No target drive found!");
-        }
-
-        if (!Directory.Exists(metadataPath))
-        {
-            // No applications installed
-            return Array.Empty<Package>();
-        }
-
-        var metadataFiles = Directory.GetFiles(metadataPath, "*.json");
-
-        if (metadataFiles.Length == 0)
-        {
-            throw new Exception("No metadata found!");
-        }
-
-        List<Package> packages = new();
-
-        foreach (var file in metadataFiles)
-        {
-            var json = File.ReadAllText(file);
-            var package = JsonSerializer.Deserialize<Package>(json);
-
-            packages.Add(package);
-        }
-
-        return packages.ToArray();
-    }
-
-    internal static async Task<Package[]> GetPackages()
+    internal static async Task<Package[]> GetPackages(string? category = null)
     {
         var client = new HttpClient();
         var json = await client.GetStringAsync(_repo);
 
-        RootObject root = JsonSerializer.Deserialize<RootObject>(json);
+        RootObject? root = JsonSerializer.Deserialize<RootObject>(json);
 
         if (root is null)
         {
@@ -143,26 +109,22 @@ internal class Downloader
         {
             throw new Exception("No packages found!");
         }
+        if (category is not null)
+        {
+            return root.Packages.Where(x => x.Category?.ToLower() == category.ToLower()).ToArray();
+        }
         return root.Packages.ToArray();
-    }
-
-    internal static async Task<Package[]> GetPackagesByCategory(string category)
-    {
-        var packages = await GetPackages();
-        var categoryPackages = packages.Where(x => x.Category.ToLower() == category.ToLower());
-
-        return categoryPackages.ToArray();
     }
 
     internal static async Task DownloadPackage(string packageName)
     {
-        if (SDManager._targetDrive is null)
+        if (MediaDevice.Device is null)
         {
             throw new Exception("No target drive found!");
         }
 
         var packages = await GetPackages();
-        var package = packages.FirstOrDefault(x => x.Name.ToLower() == packageName.ToLower());
+        var package = packages.FirstOrDefault(x => x.Name?.ToLower() == packageName.ToLower());
 
         if (package is null)
         {
@@ -173,7 +135,7 @@ internal class Downloader
         var zip = await client.GetByteArrayAsync($"{_dlRepo}{package.Name}.zip");
         File.WriteAllBytes($"{package.Name}.zip", zip);
 
-        FileManager.ExtractZip($"{package.Name}.zip", SDManager._targetDrive.Name);
+        FileManager.ExtractZip($"{package.Name}.zip", MediaDevice.Device.Name);
 
         WriteMetadata(package);
     }
@@ -184,7 +146,7 @@ internal class Downloader
         var aromaPaylodsURL = "https://aroma.foryour.cafe/api/download?packages=environmentloader,wiiu-nanddumper-payload";
         var aromaBaseURL = "https://github.com/wiiu-env/Aroma/releases/download/beta-16/aroma-beta-16.zip";
 
-        if (SDManager._targetDrive is null)
+        if (MediaDevice.Device is null)
         {
             throw new Exception("No target drive found!");
         }
@@ -204,8 +166,8 @@ internal class Downloader
         File.WriteAllBytes(aromaBasePath, aromaBase);
         File.WriteAllBytes(aromaPayloadsPath, aromaPayloads);
 
-        FileManager.ExtractZip(aromaBasePath, SDManager._targetDrive.Name);
-        FileManager.ExtractZip(aromaPayloadsPath, SDManager._targetDrive.Name);
+        FileManager.ExtractZip(aromaBasePath, MediaDevice.Device.Name);
+        FileManager.ExtractZip(aromaPayloadsPath, MediaDevice.Device.Name);
 
         File.Delete(aromaBasePath);
         File.Delete(aromaPayloadsPath);
@@ -215,7 +177,7 @@ internal class Downloader
     {
         var tiramisuDL = "https://github.com/wiiu-env/Tiramisu/releases/download/v0.1.2/environmentloader-28332a7+wiiu-nanddumper-payload-5c5ec09+fw_img_loader-c2da326.zip";
 
-        if (SDManager._targetDrive is null)
+        if (MediaDevice.Device is null)
         {
             throw new Exception("No target drive found!");
         }
@@ -229,7 +191,7 @@ internal class Downloader
         var tiramisuPath = Path.Join(_downloadPath, "tiramisu.zip");
         File.WriteAllBytes(tiramisuPath, tiramisu);
 
-        FileManager.ExtractZip(tiramisuPath, SDManager._targetDrive.Name);
+        FileManager.ExtractZip(tiramisuPath, MediaDevice.Device.Name);
 
         File.Delete(tiramisuPath);
     }
