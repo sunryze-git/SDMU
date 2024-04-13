@@ -26,7 +26,7 @@ internal class MediaDevice
         List<DriveInfo> removableDrives = new List<DriveInfo>();
         foreach (DriveInfo drive in drives)
         {
-            if (drive.DriveType == DriveType.Fixed)
+            if (drive.DriveType == DriveType.Removable)
             {
                 removableDrives.Add(drive);
             }
