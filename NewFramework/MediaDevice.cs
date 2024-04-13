@@ -28,7 +28,7 @@ internal class MediaDevice
         {
             if (drive.DriveType == DriveType.Removable)
             {
-                removableDrives.Add(drive);
+                if (drive.IsReady) removableDrives.Add(drive);
             }
         }
         return removableDrives.ToArray();
