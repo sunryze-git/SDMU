@@ -12,6 +12,21 @@ internal class AppMenu
         {
             Console.Clear();
 
+            // Write Header
+            AnsiConsole.Write(
+                new Panel(
+                    new FigletText("Applications")
+                        .Centered()
+                        .Color(Color.LightSteelBlue))
+                .Expand()
+                .Border(BoxBorder.Rounded)
+                .Header("[yellow]Always make sure to reference the [link=https://wiiu.hacks.guide#/][blue]Wii U Hacks Guide![/][/][/]")
+                .HeaderAlignment(Justify.Center)
+                .BorderStyle(new Style(Color.White)));
+
+            AnsiConsole.MarkupLine($"[yellow]SD Card: {MediaDevice.Device?.Name}[/]\n");
+            // 
+
             // Get list of applications installed
             var apps = MediaDevice.InstalledPackages;
 
@@ -25,7 +40,13 @@ internal class AppMenu
             // Add each application to the panel
             foreach (var app in apps)
             {
-                appTable.AddRow(app.Name, app.Version, app.Category, app.Author, app.Updated);
+                appTable.AddRow(
+                    new Markup($"[cyan]{app.Name}[/]"),
+                    new Markup($"[grey78]{app.Version}[/]"),
+                    new Markup($"[yellow]{app.Category}[/]"),
+                    new Markup($"[grey78]{app.Author}[/]"),
+                    new Markup($"{app.Updated}")
+                );
             }
 
             if (apps.Count() < 1)
@@ -48,7 +69,6 @@ internal class AppMenu
             });
 
             var prompt = new SelectionPrompt<(string Name, string Id)>()
-                .Title("SDMU Application Menu:")
                 .PageSize(10)
                 .UseConverter(item => item.Name)
                 .AddChoices(promptItems);

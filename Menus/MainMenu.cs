@@ -13,6 +13,7 @@ internal static class MainMenu
         {
             Console.Clear();
 
+            // Write Header
             AnsiConsole.Write(
                 new Panel(
                     new FigletText("Welcome to SDMU!")
@@ -29,6 +30,7 @@ internal static class MainMenu
                 new MediaDevice();
             }
             AnsiConsole.MarkupLine($"[yellow]SD Card: {MediaDevice.Device?.Name}[/]\n");
+            // 
 
             homebrewDetected = MediaDevice.HasHomebrew;
             var mainMenuItems = new List<(string Name, string Id)>();
@@ -59,7 +61,6 @@ internal static class MainMenu
             });
 
             var prompt = new SelectionPrompt<(string Name, string Id)>()
-                .Title("[blue]-- SDMU Main Menu --[/]")
                 .PageSize(10)
                 .UseConverter(item => item.Name)
                 .AddChoices(mainMenuItems);

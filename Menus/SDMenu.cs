@@ -1,6 +1,7 @@
 ﻿using SDMU.NewFramework;
 using SDMU.Utilities;
 using Spectre.Console;
+using System.IO;
 
 namespace SDMU.Menus;
 internal class SDMenu
@@ -33,6 +34,21 @@ internal class SDMenu
         {
             Console.Clear();
 
+            // Write Header
+            AnsiConsole.Write(
+                new Panel(
+                    new FigletText("SD Card")
+                        .Centered()
+                        .Color(Color.LightSteelBlue))
+                .Expand()
+                .Border(BoxBorder.Rounded)
+                .Header("[yellow]Always make sure to reference the [link=https://wiiu.hacks.guide#/][blue]Wii U Hacks Guide![/][/][/]")
+                .HeaderAlignment(Justify.Center)
+                .BorderStyle(new Style(Color.White)));
+
+            AnsiConsole.MarkupLine($"[yellow]SD Card: {MediaDevice.Device?.Name}[/]\n");
+            // 
+
             var promptItems = new List<(string Name, string Id)>();
             promptItems.AddRange(new[]
             {
@@ -45,7 +61,6 @@ internal class SDMenu
             });
 
             var prompt = new SelectionPrompt<(string Name, string Id)>()
-                .Title("SDMU SD Menu:")
                 .PageSize(10)
                 .UseConverter(item => item.Name)
                 .AddChoices(promptItems);
