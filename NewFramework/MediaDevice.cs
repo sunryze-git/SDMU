@@ -1,5 +1,7 @@
 ﻿using Spectre.Console;
+using System.Diagnostics;
 using System.IO;
+using System.Reflection.Metadata;
 using System.Text.Json;
 
 namespace SDMU.NewFramework;
@@ -59,30 +61,98 @@ internal class MediaDevice
         Device = AnsiConsole.Prompt(drivePrompt);
     }
 
+    private static int FormatWindows()
+    {
+        // CMD Command: format {_targetDrive.Name} /FS:FAT32 /V:WIIU_SD /Q /X | then exit
+        System.Diagnostics.Process process = new System.Diagnostics.Process();
+        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
+        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+        startInfo.FileName = "cmd.exe";
+        var name = MediaDevice.Device?.Name.Remove(MediaDevice.Device.Name.Length - 1);
+        startInfo.Arguments = $"/C format {name} /FS:FAT32 /V:HBSD /Q /X /y";
+
+        // Redirect standard output and error streams to null
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.UseShellExecute = false;
+
+        process.StartInfo = startInfo;
+        process.Start();
+        process.WaitForExit();
+
+        return process.ExitCode;
+    }
+
+    private static int FormatMac()
+    {
+        // CMD Command: diskutil eraseDisk FAT32 WIIU_SD MBRFormat /dev/disk2
+        System.Diagnostics.Process process = new System.Diagnostics.Process();
+        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
+        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+        startInfo.FileName = "diskutil";
+        startInfo.Arguments = $"eraseDisk FAT32 WIIU_SD MBRFormat {MediaDevice.Device?.Name}";
+
+        // Redirect standard output and error streams to null
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.UseShellExecute = false;
+
+        process.StartInfo = startInfo;
+        process.Start();
+        process.WaitForExit();
+
+        return process.ExitCode;
+    }
+
+    private static int FormatLinux()
+    {
+        // CMD Command: mkfs.vfat -F 32 -n WIIU_SD /dev/sdb
+        System.Diagnostics.Process process = new System.Diagnostics.Process();
+        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
+        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+        startInfo.FileName = "mkfs.vfat";
+        startInfo.Arguments = $"-F 32 -n WIIU_SD {MediaDevice.Device?.Name}";
+
+        // Redirect standard output and error streams to null
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.UseShellExecute = false;
+
+        process.StartInfo = startInfo;
+        process.Start();
+        process.WaitForExit();
+
+        return process.ExitCode;
+    }
+
+    // To support the three OSes, we need to do formatting seperately per OS
     internal static void Format()
     {
+        var os = System.Environment.OSVersion.Platform;
+        Debug.WriteLine($"OS is {os}");
         AnsiConsole.Status()
             .Start($"Formatting {MediaDevice.Device?.Name}...", ctx =>
             {
+                int rc;
                 ctx.Spinner(Spinner.Known.Dots);
 
-                // CMD Command: format {_targetDrive.Name} /FS:FAT32 /V:WIIU_SD /Q /X | then exit
-                System.Diagnostics.Process process = new System.Diagnostics.Process();
-                System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
-                startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-                startInfo.FileName = "cmd.exe";
-                var name = MediaDevice.Device?.Name.Remove(MediaDevice.Device.Name.Length - 1);
-                startInfo.Arguments = $"/C format {name} /FS:FAT32 /V:HBSD /Q /X /y";
+                switch (os)
+                {
+                    case PlatformID.Win32NT:
+                        rc = FormatWindows();
+                        break;
+                    case PlatformID.Unix:
+                        rc = FormatLinux();
+                        break;
+                    case PlatformID.MacOSX:
+                        rc = FormatMac();
+                        break;
+                    default:
+                        throw new Exception("Unsupported OS!");
+                }
 
-                // Redirect standard output and error streams to null
-                startInfo.RedirectStandardOutput = true;
-                startInfo.RedirectStandardError = true;
-                startInfo.UseShellExecute = false;
 
-                process.StartInfo = startInfo;
-                process.Start();
-                process.WaitForExit();
-                if (process.ExitCode != 0)
+                if (rc != 0)
                 {
                     ctx.Spinner(Spinner.Known.Default); // Stop the spinner
                     throw new Exception("Failed to format the SD Card!");
