@@ -59,6 +59,6 @@ This project is licensed under the [MIT License](LICENSE.txt).
 
 ## Roadmap
 
-[ ] Minimum SD Card Size Check
-[ ] 100% Multi-Platform app compatibility
-[ ] Re-Install Homebrew Files
+[] Minimum SD Card Size Check
+[] 100% Multi-Platform app compatibility
+[] Re-Install Homebrew Files
