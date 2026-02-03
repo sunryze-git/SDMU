@@ -1,6 +1,4 @@
 ﻿using SDMU.Utilities;
-using System.IO;
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -9,10 +7,10 @@ namespace SDMU.NewFramework;
 internal class Package
 {
     [JsonPropertyName("category")]
-    public string? Category { get; set; }
+    public string? Category { get; init; }
 
     [JsonPropertyName("binary")]
-    public string? Binary { get; set; }
+    public string? Binary { get; init; }
 
     [JsonPropertyName("updated")]
     public string? Updated { get; set; }
@@ -67,134 +65,100 @@ internal class RootObject
 }
 
 
-internal class Downloader
+internal abstract class Downloader(HttpClient client, MediaDevice mediaDevice)
 {
-    private readonly static string _repo = "https://wiiu.cdn.fortheusers.org/repo.json";
-    private readonly static string _dlRepo = "https://wiiu.cdn.fortheusers.org/zips/";
+    private const string Repo = "https://wiiu.cdn.fortheusers.org/repo.json";
+    private const string DlRepo = "https://wiiu.cdn.fortheusers.org/zips/";
+    private const string TiramisuDl = "https://github.com/wiiu-env/Tiramisu/releases/download/v0.1.2/environmentloader-28332a7+wiiu-nanddumper-payload-5c5ec09+fw_img_loader-c2da326.zip";
+    private const string AromaPaylodsUrl = "https://aroma.foryour.cafe/api/download?packages=environmentloader,wiiu-nanddumper-payload";
+    private const string AromaBaseUrl = "https://github.com/wiiu-env/Aroma/releases/download/beta-16/aroma-beta-16.zip";
 
-    private static string _downloadPath = Path.GetTempPath();
-
-    private static void WriteMetadata(Package package)
+    private void WriteMetadata(Package package)
     {
         var json = JsonSerializer.Serialize(package);
-        var targetDrive = MediaDevice.Device?.Name;
-
-        if (targetDrive is null)
-        {
-            throw new Exception("No target drive found!");
-        }
-
-        var metadataPath = $"{targetDrive}\\metadata";
+        var targetDrive = mediaDevice.Device.Name;
+        var metadataPath = Path.Join(targetDrive, "metadata");
 
         // Create path if not exist
-        if (!Directory.Exists(metadataPath))
-        {
-            Directory.CreateDirectory(metadataPath);
-        }
+        if (!Directory.Exists(metadataPath)) Directory.CreateDirectory(metadataPath);
 
-        File.WriteAllText($"{metadataPath}\\{package.Name}.json", json);
+        var outFile = Path.Join(metadataPath, $"{package.Name}.zip");
+        File.WriteAllText(outFile, json);
     }
 
-    internal static async Task<Package[]> GetPackages(string? category = null)
+    internal async Task<Package[]> GetPackages(string? category = null)
     {
-        var client = new HttpClient();
-        var json = await client.GetStringAsync(_repo);
-
-        RootObject? root = JsonSerializer.Deserialize<RootObject>(json);
-
+        var json = await client.GetStringAsync(Repo);
+        var root = JsonSerializer.Deserialize<RootObject>(json);
         if (root is null)
         {
             throw new Exception("Failed to get packages!");
         }
-
         if (root.Packages is null)
         {
             throw new Exception("No packages found!");
         }
         if (category is not null)
         {
-            return root.Packages.Where(x => x.Category?.ToLower() == category.ToLower()).ToArray();
+            return root.Packages
+                .Where(x => string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
         }
         return root.Packages.ToArray();
     }
 
-    internal static async Task DownloadPackage(string packageName)
+    internal async Task DownloadPackage(string packageName)
     {
-        if (MediaDevice.Device is null)
-        {
-            throw new Exception("No target drive found!");
-        }
-
         var packages = await GetPackages();
-        var package = packages.FirstOrDefault(x => x.Name?.ToLower() == packageName.ToLower());
+        var package = packages
+            .FirstOrDefault(x => string.Equals(x.Name, packageName, StringComparison.OrdinalIgnoreCase));
 
         if (package is null)
         {
             throw new Exception("Package not found!");
         }
-
-        var client = new HttpClient();
-        var zip = await client.GetByteArrayAsync($"{_dlRepo}{package.Name}.zip");
-        File.WriteAllBytes($"{package.Name}.zip", zip);
-
-        FileManager.ExtractZip($"{package.Name}.zip", MediaDevice.Device.Name);
+        
+        var packageDownloadPath = Path.Join(Path.GetTempPath(), $"{package.Name}.zip");
+        await DownloadFile(new Uri($"{DlRepo}{package.Name}.zip"), packageDownloadPath);
+        FileManager.ExtractZip(packageDownloadPath, mediaDevice.Device.Name);
 
         WriteMetadata(package);
     }
 
-    internal static async Task DownloadAroma()
+    internal async Task DownloadAroma()
     {
-
-        var aromaPaylodsURL = "https://aroma.foryour.cafe/api/download?packages=environmentloader,wiiu-nanddumper-payload";
-        var aromaBaseURL = "https://github.com/wiiu-env/Aroma/releases/download/beta-16/aroma-beta-16.zip";
-
-        if (MediaDevice.Device is null)
-        {
-            throw new Exception("No target drive found!");
-        }
-
-        byte[] aromaBase;
-        byte[] aromaPayloads;
-
-        using (HttpClient client = new())
-        {
-            aromaBase = await client.GetByteArrayAsync(aromaBaseURL);
-            aromaPayloads = await client.GetByteArrayAsync(aromaPaylodsURL);
-        }
-
-        var aromaBasePath = Path.Join(_downloadPath, "aroma.zip");
-        var aromaPayloadsPath = Path.Join(_downloadPath, "aroma_payloads.zip");
-
-        File.WriteAllBytes(aromaBasePath, aromaBase);
-        File.WriteAllBytes(aromaPayloadsPath, aromaPayloads);
-
-        FileManager.ExtractZip(aromaBasePath, MediaDevice.Device.Name);
-        FileManager.ExtractZip(aromaPayloadsPath, MediaDevice.Device.Name);
-
-        File.Delete(aromaBasePath);
-        File.Delete(aromaPayloadsPath);
+        await DownloadFileAndExtract(new Uri(AromaBaseUrl), mediaDevice.Device.Name);
+        await DownloadFileAndExtract(new Uri(AromaPaylodsUrl), mediaDevice.Device.Name);
     }
 
-    internal static async Task DownloadTiramisu()
+    internal async Task DownloadTiramisu()
     {
-        var tiramisuDL = "https://github.com/wiiu-env/Tiramisu/releases/download/v0.1.2/environmentloader-28332a7+wiiu-nanddumper-payload-5c5ec09+fw_img_loader-c2da326.zip";
+        await DownloadFileAndExtract(new Uri(TiramisuDl), mediaDevice.Device.Name);
+    }
 
-        if (MediaDevice.Device is null)
+    private async Task<string> DownloadFile(Uri uri, string outputPath)
+    {
+        var fileName = Path.GetFileName(uri.LocalPath);
+        var filePath = Path.Join(outputPath, fileName);
+        try
         {
-            throw new Exception("No target drive found!");
-        }
+            var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
 
-        byte[] tiramisu;
-        using (HttpClient client = new())
+            await using FileStream outStream = new(filePath, FileMode.Create);
+            await response.Content.CopyToAsync(outStream);
+        }
+        catch (HttpRequestException e)
         {
-            tiramisu = await client.GetByteArrayAsync(tiramisuDL);
+            Console.WriteLine($"Failed to download file: {e.Message}");
         }
-
-        var tiramisuPath = Path.Join(_downloadPath, "tiramisu.zip");
-        File.WriteAllBytes(tiramisuPath, tiramisu);
-
-        FileManager.ExtractZip(tiramisuPath, MediaDevice.Device.Name);
-
-        File.Delete(tiramisuPath);
+        
+        return filePath;
+    }
+    
+    private async Task DownloadFileAndExtract(Uri uri, string outputPath)
+    {
+        var outputFile = await DownloadFile(uri, outputPath);
+        FileManager.ExtractZip(outputFile, mediaDevice.Device.Name);
     }
 }
