@@ -1,8 +1,6 @@
-﻿using Spectre.Console;
-using System.Diagnostics;
-using System.IO;
-using System.Reflection.Metadata;
+﻿using System.Diagnostics;
 using System.Text.Json;
+using Spectre.Console;
 
 namespace SDMU.NewFramework;
 
@@ -10,33 +8,27 @@ namespace SDMU.NewFramework;
 
 internal class MediaDevice
 {
-    public static DriveInfo? Device;
+    public readonly DriveInfo Device;
 
-    public static bool HasTiramisu => IsTiramisuInstalled();
-    public static bool HasAroma => IsAromaInstalled();
-    public static bool HasHomebrew => IsHomebrewPresent();
-    public static Package[] InstalledPackages => GetInstalledPackages();
+    public bool HasTiramisu => IsTiramisuInstalled();
+    public bool HasAroma => IsAromaInstalled();
+    public bool HasHomebrew => IsHomebrewPresent();
+    public Package[] InstalledPackages => GetInstalledPackages();
 
     public MediaDevice()
     {
-        SetTargetDrive();
+        Device = SetTargetDrive();
     }
 
-    private static DriveInfo[] GetRemovableDrives()
+    private DriveInfo[] GetRemovableDrives()
     {
         var drives = DriveInfo.GetDrives();
-        List<DriveInfo> removableDrives = new List<DriveInfo>();
-        foreach (DriveInfo drive in drives)
-        {
-            if (drive.DriveType == DriveType.Removable)
-            {
-                if (drive.IsReady) removableDrives.Add(drive);
-            }
-        }
-        return removableDrives.ToArray();
+        return drives
+            .Where(drive => drive is { DriveType: DriveType.Removable, IsReady: true })
+            .ToArray();
     }
 
-    private void SetTargetDrive()
+    private DriveInfo SetTargetDrive()
     {
         var drives = GetRemovableDrives();
         while (drives.Length < 1)
@@ -51,24 +43,27 @@ internal class MediaDevice
         }
 
         // Prompt the user to select a drive
-        SelectionPrompt<DriveInfo> drivePrompt = new SelectionPrompt<DriveInfo>()
+        var drivePrompt = new SelectionPrompt<DriveInfo>()
             .Title("Please select a drive:")
             .PageSize(10)
             .MoreChoicesText("[grey](Move up and down to reveal more drives)[/]")
             .AddChoices(drives)
-            .UseConverter(drive => $"[yellow]{drive.Name}[/] [grey]({drive.DriveType}, {drive.DriveFormat}, {drive.TotalSize / 1000000000} GB, {drive.AvailableFreeSpace / 1000000000} GB free)[/]");
+            .UseConverter(drive =>
+                $"[yellow]{drive.Name}[/] [grey]({drive.DriveType}, {drive.DriveFormat}, {drive.TotalSize / 1000000000} GB, {drive.AvailableFreeSpace / 1000000000} GB free)[/]");
 
-        Device = AnsiConsole.Prompt(drivePrompt);
+        return AnsiConsole.Prompt(drivePrompt);
     }
 
-    private static int FormatWindows()
+    private int FormatWindows()
     {
         // CMD Command: format {_targetDrive.Name} /FS:FAT32 /V:WIIU_SD /Q /X | then exit
-        System.Diagnostics.Process process = new System.Diagnostics.Process();
-        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
-        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-        startInfo.FileName = "cmd.exe";
-        var name = MediaDevice.Device?.Name.Remove(MediaDevice.Device.Name.Length - 1);
+        var process = new Process();
+        var startInfo = new ProcessStartInfo
+        {
+            WindowStyle = ProcessWindowStyle.Hidden,
+            FileName = "cmd.exe"
+        };
+        var name = Device.Name.Remove(Device.Name.Length - 1);
         startInfo.Arguments = $"/C format {name} /FS:FAT32 /V:HBSD /Q /X /y";
 
         // Redirect standard output and error streams to null
@@ -83,19 +78,20 @@ internal class MediaDevice
         return process.ExitCode;
     }
 
-    private static int FormatMac()
+    private int FormatMac()
     {
         // CMD Command: diskutil eraseDisk FAT32 WIIU_SD MBRFormat /dev/disk2
-        System.Diagnostics.Process process = new System.Diagnostics.Process();
-        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
-        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-        startInfo.FileName = "diskutil";
-        startInfo.Arguments = $"eraseDisk FAT32 WIIU_SD MBRFormat {MediaDevice.Device?.Name}";
-
-        // Redirect standard output and error streams to null
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
-        startInfo.UseShellExecute = false;
+        var process = new Process();
+        var startInfo = new ProcessStartInfo
+        {
+            WindowStyle = ProcessWindowStyle.Hidden,
+            FileName = "diskutil",
+            Arguments = $"eraseDisk FAT32 WIIU_SD MBRFormat {Device.Name}",
+            // Redirect standard output and error streams to null
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
 
         process.StartInfo = startInfo;
         process.Start();
@@ -104,19 +100,20 @@ internal class MediaDevice
         return process.ExitCode;
     }
 
-    private static int FormatLinux()
+    private int FormatLinux()
     {
         // CMD Command: mkfs.vfat -F 32 -n WIIU_SD /dev/sdb
-        System.Diagnostics.Process process = new System.Diagnostics.Process();
-        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
-        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-        startInfo.FileName = "mkfs.vfat";
-        startInfo.Arguments = $"-F 32 -n WIIU_SD {MediaDevice.Device?.Name}";
-
-        // Redirect standard output and error streams to null
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
-        startInfo.UseShellExecute = false;
+        var process = new Process();
+        var startInfo = new ProcessStartInfo
+        {
+            WindowStyle = ProcessWindowStyle.Hidden,
+            FileName = "mkfs.vfat",
+            Arguments = $"-F 32 -n WIIU_SD {Device.Name}",
+            // Redirect standard output and error streams to null
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
 
         process.StartInfo = startInfo;
         process.Start();
@@ -126,12 +123,12 @@ internal class MediaDevice
     }
 
     // To support the three OSes, we need to do formatting seperately per OS
-    internal static void Format()
+    internal void Format()
     {
-        var os = System.Environment.OSVersion.Platform;
+        var os = Environment.OSVersion.Platform;
         Debug.WriteLine($"OS is {os}");
         AnsiConsole.Status()
-            .Start($"Formatting {MediaDevice.Device?.Name}...", ctx =>
+            .Start($"Formatting {Device.Name}...", ctx =>
             {
                 int rc;
                 ctx.Spinner(Spinner.Known.Dots);
@@ -152,62 +149,49 @@ internal class MediaDevice
                 }
 
 
-                if (rc != 0)
-                {
-                    ctx.Spinner(Spinner.Known.Default); // Stop the spinner
-                    throw new Exception("Failed to format the SD Card!");
-                }
+                if (rc == 0) return;
+                ctx.Spinner(Spinner.Known.Default); // Stop the spinner
+                throw new Exception("Failed to format the SD Card!");
             });
     }
 
-    private static bool IsHomebrewPresent()
+    private bool IsHomebrewPresent()
     {
-        string homebrewFolder = $"{Device}wiiu";
+        var homebrewFolder = $"{Device}wiiu";
         return Directory.Exists(homebrewFolder);
     }
 
-    private static bool IsAromaInstalled()
+    private bool IsAromaInstalled()
     {
-        string aromaFolder = $"{Device}wiiu\\environments\\aroma";
+        var aromaFolder = $@"{Device}wiiu\environments\aroma";
         return Directory.Exists(aromaFolder);
     }
 
-    private static bool IsTiramisuInstalled()
+    private bool IsTiramisuInstalled()
     {
-        string tiramisuFolder = $"{Device}wiiu\\environments\\tiramisu";
+        var tiramisuFolder = $@"{Device}wiiu\environments\tiramisu";
         return Directory.Exists(tiramisuFolder);
     }
 
-    private static Package[] GetInstalledPackages()
+    private Package[] GetInstalledPackages()
     {
-        var metadataPath = $"{Device?.Name}\\metadata";
+        var metadataPath = $"{Device.Name}\\metadata";
 
-        if (metadataPath is null)
-        {
-            throw new Exception("No target drive found!");
-        }
+        if (metadataPath is null) throw new Exception("No target drive found!");
 
         if (!Directory.Exists(metadataPath))
-        {
             // No applications installed
-            return Array.Empty<Package>();
-        }
+            return [];
 
         var metadataFiles = Directory.GetFiles(metadataPath, "*.json");
 
-        if (metadataFiles.Length == 0)
-        {
-            throw new Exception("No metadata found!");
-        }
+        if (metadataFiles.Length == 0) throw new Exception("No metadata found!");
 
-        List<Package> packages = new();
-        foreach (var file in metadataFiles)
-        {
-            var json = File.ReadAllText(file);
-            var package = JsonSerializer.Deserialize<Package>(json);
-
-            if (package is not null) { packages.Add(package); }
-        }
+        List<Package> packages = [];
+        packages.AddRange(metadataFiles
+            .Select(File.ReadAllText)
+            .Select(json => JsonSerializer.Deserialize<Package>(json))
+            .OfType<Package>());
 
         return [.. packages];
     }

@@ -2,14 +2,18 @@
 
 namespace SDMU.Utilities;
 
-internal class AppTypes
+internal class AppTypes(Downloader downloader)
 {
-    public static Dictionary<string, Func<Task>> BaseApps { get; } = new()
+    public Dictionary<string, Func<Task>> BaseApps { get; } = new()
     {
-        ["Aroma"] = Downloader.DownloadAroma,
-        ["Tiramisu"] = Downloader.DownloadTiramisu
+        ["Aroma"] = downloader.DownloadAroma,
+        ["Tiramisu"] = downloader.DownloadTiramisu
     };
 
-    public static List<string> ExtraApps { get; } = Downloader.GetPackages("aroma").Result.Select(x => x.Name).ToList()!;
-
+    public List<string> ExtraApps { get; } = 
+        downloader.GetPackages("aroma").Result
+            .Where(x => x.Name is not null)
+            .Select(x => x.Name)
+            .OfType<string>()
+            .ToList();
 }

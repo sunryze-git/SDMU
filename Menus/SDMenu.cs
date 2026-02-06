@@ -1,16 +1,14 @@
 ﻿using SDMU.NewFramework;
 using SDMU.Utilities;
 using Spectre.Console;
-using System.IO;
 
 namespace SDMU.Menus;
-internal class SDMenu
+internal class SdMenu(FileManager fileManager, MediaDevice device)
 {
     // Get table of backups within the backup directory
-    private static Table GetBackups()
+    private Table GetBackups()
     {
-        var backupDir = FileManager.GetBackupsDirectory();
-        var backups = Directory.GetDirectories(backupDir);
+        var backups = Directory.GetDirectories(fileManager.BackupFolder);
 
         var table = new Table();
         table.AddColumn("Backup Name");
@@ -28,7 +26,7 @@ internal class SDMenu
     }
 
     // Show Menu Screen
-    internal static void Show()
+    internal void Show()
     {
         while (true)
         {
@@ -46,19 +44,18 @@ internal class SDMenu
                 .HeaderAlignment(Justify.Center)
                 .BorderStyle(new Style(Color.White)));
 
-            AnsiConsole.MarkupLine($"[yellow]SD Card: {MediaDevice.Device?.Name}[/]\n");
+            AnsiConsole.MarkupLine($"[yellow]SD Card: {device.Device?.Name}[/]\n");
             // 
 
             var promptItems = new List<(string Name, string Id)>();
-            promptItems.AddRange(new[]
-            {
+            promptItems.AddRange([
                 ("Backup SD Card", "backup"),
                 ("Restore SD Card", "restore"),
                 ("Delete Backup", "delete"),
                 ("Format SD Card", "format"),
                 (" ", "spacer"),
                 ("Return to Main Menu", "back")
-            });
+            ]);
 
             var prompt = new SelectionPrompt<(string Name, string Id)>()
                 .PageSize(10)
@@ -77,25 +74,25 @@ internal class SDMenu
         }
     }
 
-    internal static void HandleSelection(string selectionId)
+    private void HandleSelection(string selectionId)
     {
         switch (selectionId)
         {
             case "backup":
-                FileManager.BackupMedia();
+                fileManager.BackupMedia();
                 AnsiConsole.MarkupLine("[bold green]Backup complete![/]");
                 Thread.Sleep(2000);
                 break;
             case "restore":
-                FileManager.RestoreMedia();
+                fileManager.RestoreMedia();
                 AnsiConsole.MarkupLine("[bold green]Restore complete![/]");
                 Thread.Sleep(2000);
                 break;
             case "delete":
-                FileManager.DeleteBackup();
+                fileManager.DeleteBackup();
                 break;
             case "format":
-                MediaDevice.Format();
+                device.Format();
                 AnsiConsole.MarkupLine("[bold green]SD Card formatted![/]");
                 Thread.Sleep(2000);
                 break;

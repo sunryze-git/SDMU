@@ -1,12 +1,13 @@
 ﻿namespace SDMU.Menus;
 
-using SDMU.NewFramework;
-using SDMU.Utilities;
+using NewFramework;
+using Utilities;
 using Spectre.Console;
 
-internal class AppMenu
+internal class AppMenu(
+    MediaDevice mediaDevice, FileManager fileManager, Downloader downloader, AppTypes appType, Updater updater)
 {
-    internal static void Show()
+    internal async Task Show()
     {
         while (true)
         {
@@ -24,11 +25,11 @@ internal class AppMenu
                 .HeaderAlignment(Justify.Center)
                 .BorderStyle(new Style(Color.White)));
 
-            AnsiConsole.MarkupLine($"[yellow]SD Card: {MediaDevice.Device?.Name}[/]\n");
+            AnsiConsole.MarkupLine($"[yellow]SD Card: {mediaDevice.Device.Name}[/]\n");
             // 
 
             // Get list of applications installed
-            var apps = MediaDevice.InstalledPackages;
+            var apps = mediaDevice.InstalledPackages;
 
             var appTable = new Table();
             appTable.AddColumn("Name");
@@ -49,7 +50,7 @@ internal class AppMenu
                 );
             }
 
-            if (apps.Count() < 1)
+            if (apps.Length == 0)
             {
                 appTable.AddRow("No Applications Installed");
             }
@@ -59,14 +60,13 @@ internal class AppMenu
 
             var promptItems = new List<(string Name, string Id)>();
 
-            promptItems.AddRange(new[]
-            {
+            promptItems.AddRange([
                 ("Install Application", "install"),
                 ("Update Application", "update"),
                 ("Uninstall Application", "uninstall"),
                 (" ", "spacer"),
                 ("Return to Main Menu", "back")
-            });
+            ]);
 
             var prompt = new SelectionPrompt<(string Name, string Id)>()
                 .PageSize(10)
@@ -81,11 +81,11 @@ internal class AppMenu
             // Ignore selections of spacers
             if (selectedItem.Id == "spacer") continue;
 
-            HandleSelection(selectedItem.Id);
+            await HandleSelection(selectedItem.Id);
         }
     }
 
-    private static void HandleSelection(string id)
+    private async Task HandleSelection(string id)
     {
         switch (id)
         {
@@ -94,18 +94,18 @@ internal class AppMenu
                 var extraApps = AnsiConsole.Prompt(new MultiSelectionPrompt<string>()
                        .Title("[yellow]Which additional applications would you like to install?[/]")
                        .PageSize(10)
-                       .AddChoices(AppTypes.ExtraApps)
+                       .AddChoices(appType.ExtraApps)
                        .NotRequired());
 
                 foreach (var app in extraApps)
                 {
-                    if (AppTypes.ExtraApps.Contains(app))
+                    if (appType.ExtraApps.Contains(app))
                     {
                         AnsiConsole.Status()
                             .Start($"Downloading {app}", ctx =>
                             {
                                 ctx.Spinner(Spinner.Known.Star);
-                                Downloader.DownloadPackage(app).Wait();
+                                downloader.DownloadPackage(app).Wait();
                             });
                     }
                     else
@@ -115,7 +115,7 @@ internal class AppMenu
                 }
                 break;
             case "update":
-                Updater.ComparePackageHash();
+                await updater.ComparePackageHash();
                 break;
             case "uninstall":
                 break;

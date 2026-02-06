@@ -65,7 +65,7 @@ internal class RootObject
 }
 
 
-internal abstract class Downloader(HttpClient client, MediaDevice mediaDevice)
+internal class Downloader(HttpClient client, MediaDevice mediaDevice)
 {
     private const string Repo = "https://wiiu.cdn.fortheusers.org/repo.json";
     private const string DlRepo = "https://wiiu.cdn.fortheusers.org/zips/";
