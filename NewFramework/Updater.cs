@@ -3,10 +3,10 @@
 namespace SDMU.NewFramework;
 internal class Updater(MediaDevice mediaDevice, Downloader downloader)
 {
-    public async Task ComparePackageHash()
+    public async Task UpdatePackages()
     {
         // Get installed packages
-        var installedPackages = mediaDevice.InstalledPackages;
+        var installedPackages = await mediaDevice.GetInstalledPackages();
         var latestPackages = await downloader.GetPackages();
 
         // Sort list to only include instaled packages wtih a different MD5 than the latest

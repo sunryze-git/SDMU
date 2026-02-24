@@ -4,31 +4,12 @@ using Spectre.Console;
 
 namespace SDMU.Menus;
 
-internal class MainMenu
+internal class MainMenu(MediaDevice mediaDevice, FileManager fileManager, Downloader downloader, HbManager hbManager,
+    AppMenu appMenu, SdMenu sdMenu)
 {
-    private readonly MediaDevice _mediaDevice;
-    private readonly HbManager _hbManager;
-    private readonly FileManager _fileManager;
-    private readonly Downloader _downloader;
-    private readonly AppTypes _appType;
-    private readonly AppMenu _appMenu;
-    private readonly Updater _updater;
-    private readonly SdMenu _sdMenu;
-    public MainMenu()
-    {
-        _mediaDevice = new MediaDevice();
-        _fileManager = new FileManager(_mediaDevice);
-        _downloader = new Downloader(new HttpClient(),  _mediaDevice);
-        _appType = new AppTypes(_downloader);
-        _hbManager = new HbManager(_mediaDevice,  _fileManager, _downloader,  _appType);
-        _updater = new Updater(_mediaDevice, _downloader);
-        _appMenu = new AppMenu(_mediaDevice, _fileManager, _downloader, _appType, _updater);
-        _sdMenu = new SdMenu(_fileManager, _mediaDevice);
-    }
+    private bool HomebrewDetected => mediaDevice.IsHomebrewPresent();
 
-    private bool HomebrewDetected => _mediaDevice.HasHomebrew;
-
-    public void Show()
+    public async Task Show()
     {
         while (true)
         {
@@ -46,64 +27,35 @@ internal class MainMenu
                     .HeaderAlignment(Justify.Center)
                     .BorderStyle(new Style(Color.White)));
             
-            AnsiConsole.MarkupLine($"[yellow]SD Card: {_mediaDevice.Device?.Name}[/]\n");
+            AnsiConsole.MarkupLine($"[yellow]SD Card: {mediaDevice.Device?.Name}[/]\n");
             // 
-            var mainMenuItems = new List<(string Name, Func<Task> Delegate)>()
+            var mainMenuItems = new List<(string Name, Func<Task> method)>()
             {
-                ("Manage Applications", () => Task.Run(_appMenu.Show)),
-                ("Manage SD Card", () => Task.Run(_sdMenu.Show)),
-                ("Exit", () => Task.Run(Environment.Exit(0)))
+                ("Manage Applications", appMenu.Show),
+                ("Manage SD Card", sdMenu.Show),
+                ("Exit", () => { 
+                    Environment.Exit(0);
+                    return Task.CompletedTask;
+                })
             };
 
             // Conditional items based on Homebrew detection
-            
             if (!HomebrewDetected)
             {
-                mainMenuItems.Add(("Install Homebrew", "install"));
+                mainMenuItems.Insert(0,("Install Homebrew", hbManager.InstallHomebrew));
             }
             else
             {
-                mainMenuItems.AddRange([
-                    ("Update Homebrew", "update")
-                ]);
+                mainMenuItems.Insert(0, ("Update Homebrew", hbManager.UpdateHomebrew));
             }
 
-            var prompt = new SelectionPrompt<(string Name, string Id)>()
+            var prompt = new SelectionPrompt<(string Name, Func<Task> id)>()
                 .PageSize(10)
                 .UseConverter(item => item.Name)
                 .AddChoices(mainMenuItems);
 
             var selectedItem = AnsiConsole.Prompt(prompt);
-
-            // Exit the loop and program if "Exit" is selected
-            if (selectedItem.Id == "exit") break;
-
-            // Ignore selections of spacers
-            if (selectedItem.Id.StartsWith("spacer")) continue;
-
-            HandleSelection(selectedItem.Id, HomebrewDetected);
-        }
-    }
-
-    private void HandleSelection(string selectionId, bool homebrewDetected)
-    {
-        switch (selectionId)
-        {
-            case "install":
-                _hbManager.InstallHomebrew();
-                break;
-            case "update":
-                _hbManager.UpdateHomebrew();
-                break;
-            case "appmenu":
-                AppMenu.Show();
-                break;
-            case "sdmenu":
-                SdMenu.Show();
-                break;
-            default:
-                AnsiConsole.WriteLine("Invalid selection.");
-                break;
+            await selectedItem.Item2.Invoke();
         }
     }
 }

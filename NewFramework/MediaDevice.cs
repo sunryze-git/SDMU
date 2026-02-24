@@ -8,19 +8,9 @@ namespace SDMU.NewFramework;
 
 internal class MediaDevice
 {
-    public readonly DriveInfo Device;
+    public readonly DriveInfo Device = SetTargetDrive();
 
-    public bool HasTiramisu => IsTiramisuInstalled();
-    public bool HasAroma => IsAromaInstalled();
-    public bool HasHomebrew => IsHomebrewPresent();
-    public Package[] InstalledPackages => GetInstalledPackages();
-
-    public MediaDevice()
-    {
-        Device = SetTargetDrive();
-    }
-
-    private DriveInfo[] GetRemovableDrives()
+    private static DriveInfo[] GetRemovableDrives()
     {
         var drives = DriveInfo.GetDrives();
         return drives
@@ -28,7 +18,7 @@ internal class MediaDevice
             .ToArray();
     }
 
-    private DriveInfo SetTargetDrive()
+    private static DriveInfo SetTargetDrive()
     {
         var drives = GetRemovableDrives();
         while (drives.Length < 1)
@@ -54,145 +44,149 @@ internal class MediaDevice
         return AnsiConsole.Prompt(drivePrompt);
     }
 
-    private int FormatWindows()
+    private async Task TryRunProcess(string fileName, string arguments)
     {
-        // CMD Command: format {_targetDrive.Name} /FS:FAT32 /V:WIIU_SD /Q /X | then exit
-        var process = new Process();
-        var startInfo = new ProcessStartInfo
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo
         {
-            WindowStyle = ProcessWindowStyle.Hidden,
-            FileName = "cmd.exe"
+            FileName = fileName,
+            Arguments = arguments,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
         };
-        var name = Device.Name.Remove(Device.Name.Length - 1);
-        startInfo.Arguments = $"/C format {name} /FS:FAT32 /V:HBSD /Q /X /y";
-
-        // Redirect standard output and error streams to null
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
-        startInfo.UseShellExecute = false;
-
-        process.StartInfo = startInfo;
         process.Start();
-        process.WaitForExit();
+        var error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
 
-        return process.ExitCode;
+        if (process.ExitCode != 0)
+        {
+            throw new Exception($"Process failed with exit code {process.ExitCode}: {error.Trim()}");
+        }
     }
 
-    private int FormatMac()
+    private async Task<string> ResolvePhysicalPathLinux(string mountPoint)
     {
-        // CMD Command: diskutil eraseDisk FAT32 WIIU_SD MBRFormat /dev/disk2
-        var process = new Process();
-        var startInfo = new ProcessStartInfo
+        var target = mountPoint.TrimEnd('/');
+
+        foreach (var line in await File.ReadAllLinesAsync("/proc/mounts"))
         {
-            WindowStyle = ProcessWindowStyle.Hidden,
-            FileName = "diskutil",
-            Arguments = $"eraseDisk FAT32 WIIU_SD MBRFormat {Device.Name}",
-            // Redirect standard output and error streams to null
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2) continue;
 
-        process.StartInfo = startInfo;
-        process.Start();
-        process.WaitForExit();
-
-        return process.ExitCode;
+            var currentMount = parts[1].Replace("\\040", " ").TrimEnd('/');
+            if (currentMount == target) 
+                return parts[0];
+        }
+    
+        throw new Exception($"Could not find physical device for mount point: {mountPoint}");
     }
 
-    private int FormatLinux()
+    private Task FormatWindows() 
+        => TryRunProcess("cmd.exe", $"/C format {Device.Name.TrimEnd('\\')} /FS:FAT32 /V:HBSD /Q /X /y");
+
+    private Task FormatMacAsync() 
+        => TryRunProcess("diskutil", $"eraseDisk FAT32 WIIU_SD MBRFormat {Device.Name}");
+
+    private async Task FormatLinux()
     {
-        // CMD Command: mkfs.vfat -F 32 -n WIIU_SD /dev/sdb
-        var process = new Process();
-        var startInfo = new ProcessStartInfo
+        var mountPoint = Device.Name.TrimEnd('/');
+        var physicalPath = await ResolvePhysicalPathLinux(Device.Name.TrimEnd('/'));
+        
+        AnsiConsole.MarkupLine("[yellow]Unmounting SD Card...[/]");
+        await TryRunProcess("umount", physicalPath);
+        
+        AnsiConsole.MarkupLine("[yellow]Formatting SD Card...[/]");
+        await TryRunProcess("mkfs.vfat", $"-F 32 -n WIIU_SD {physicalPath}");
+        
+        if (!Directory.Exists(mountPoint))
         {
-            WindowStyle = ProcessWindowStyle.Hidden,
-            FileName = "mkfs.vfat",
-            Arguments = $"-F 32 -n WIIU_SD {Device.Name}",
-            // Redirect standard output and error streams to null
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-
-        process.StartInfo = startInfo;
-        process.Start();
-        process.WaitForExit();
-
-        return process.ExitCode;
+            AnsiConsole.MarkupLine("[yellow]Creating mount directory...[/]");
+            await TryRunProcess("mkdir", $"-p {mountPoint}");
+        }
+        
+        AnsiConsole.MarkupLine("[yellow]Mounting SD Card...[/]");
+        await TryRunProcess("mount", $"{physicalPath} {mountPoint}");
     }
 
     // To support the three OSes, we need to do formatting seperately per OS
-    internal void Format()
+    internal async Task Format()
     {
-        var os = Environment.OSVersion.Platform;
-        Debug.WriteLine($"OS is {os}");
-        AnsiConsole.Status()
-            .Start($"Formatting {Device.Name}...", ctx =>
+        try
+        {
+            await AnsiConsole.Status().StartAsync("Formatting...", async _ =>
             {
-                int rc;
-                ctx.Spinner(Spinner.Known.Dots);
-
-                switch (os)
-                {
-                    case PlatformID.Win32NT:
-                        rc = FormatWindows();
-                        break;
-                    case PlatformID.Unix:
-                        rc = FormatLinux();
-                        break;
-                    case PlatformID.MacOSX:
-                        rc = FormatMac();
-                        break;
-                    default:
-                        throw new Exception("Unsupported OS!");
-                }
-
-
-                if (rc == 0) return;
-                ctx.Spinner(Spinner.Known.Default); // Stop the spinner
-                throw new Exception("Failed to format the SD Card!");
+                if (OperatingSystem.IsWindows()) await FormatWindows();
+                else if (OperatingSystem.IsMacOS()) await FormatMacAsync();
+                else if (OperatingSystem.IsLinux()) await FormatLinux();
+                else throw new PlatformNotSupportedException();
+                
+                AnsiConsole.MarkupLine("[green]Format completed successfully![/]");
             });
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Format Failed:[/] {ex.Message}");
+        }
+        finally
+        {
+            AnsiConsole.MarkupLine("[red]Press any key to continue...[/]");
+            Console.ReadKey(true);
+        }
     }
 
-    private bool IsHomebrewPresent()
+    private string GetEnvironmentPath(string environment) 
+        => Path.Combine(Device.Name, "wiiu", "environments", environment);
+
+    public bool IsHomebrewPresent() 
+        => Directory.Exists(Path.Combine(Device.Name, "wiiu"));
+
+    public bool IsAromaInstalled() 
+        => Directory.Exists(GetEnvironmentPath("aroma"));
+
+    public bool IsTiramisuInstalled() 
+        => Directory.Exists(GetEnvironmentPath("tiramisu"));
+
+    public async Task<Package[]> GetInstalledPackages()
     {
-        var homebrewFolder = $"{Device}wiiu";
-        return Directory.Exists(homebrewFolder);
-    }
-
-    private bool IsAromaInstalled()
-    {
-        var aromaFolder = $@"{Device}wiiu\environments\aroma";
-        return Directory.Exists(aromaFolder);
-    }
-
-    private bool IsTiramisuInstalled()
-    {
-        var tiramisuFolder = $@"{Device}wiiu\environments\tiramisu";
-        return Directory.Exists(tiramisuFolder);
-    }
-
-    private Package[] GetInstalledPackages()
-    {
-        var metadataPath = $"{Device.Name}\\metadata";
-
-        if (metadataPath is null) throw new Exception("No target drive found!");
-
-        if (!Directory.Exists(metadataPath))
-            // No applications installed
-            return [];
+        var metadataPath = Path.Combine(Device.Name, "metadata");
+        if (!Directory.Exists(metadataPath)) return [];
 
         var metadataFiles = Directory.GetFiles(metadataPath, "*.json");
 
-        if (metadataFiles.Length == 0) throw new Exception("No metadata found!");
+        var readTasks = metadataFiles.Select(async file =>
+        {
+            try
+            {
+                var content = await File.ReadAllTextAsync(file);
+                return (Content: content, FilePath: file);
+            }
+            catch (IOException)
+            {
+                return (Content: null, FilePath: file);
+            }
+        });
+        
+        var results = await Task.WhenAll(readTasks);
+        return results
+            .Where(r => r.Content != null)
+            .Select(r => TryDeserialize(r.Content!, r.FilePath))
+            .OfType<Package>()
+            .ToArray();
+    }
 
-        List<Package> packages = [];
-        packages.AddRange(metadataFiles
-            .Select(File.ReadAllText)
-            .Select(json => JsonSerializer.Deserialize<Package>(json))
-            .OfType<Package>());
-
-        return [.. packages];
+    private static Package? TryDeserialize(string json, string localPath)
+    {
+        try
+        {
+            var pkg = JsonSerializer.Deserialize<Package>(json);
+            pkg!.LocalPath = localPath;
+            return pkg;
+        }
+        catch (JsonException ex)
+        {
+            AnsiConsole.WriteException(ex);
+            return null;
+        }
     }
 }

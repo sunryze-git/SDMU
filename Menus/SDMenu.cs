@@ -8,7 +8,7 @@ internal class SdMenu(FileManager fileManager, MediaDevice device)
     // Get table of backups within the backup directory
     private Table GetBackups()
     {
-        var backups = Directory.GetDirectories(fileManager.BackupFolder);
+        var backups = Directory.GetDirectories(FileManager.BackupFolder);
 
         var table = new Table();
         table.AddColumn("Backup Name");
@@ -26,9 +26,10 @@ internal class SdMenu(FileManager fileManager, MediaDevice device)
     }
 
     // Show Menu Screen
-    internal void Show()
+    internal async Task Show()
     {
-        while (true)
+        var running = true;
+        while (running)
         {
             Console.Clear();
 
@@ -45,57 +46,38 @@ internal class SdMenu(FileManager fileManager, MediaDevice device)
                 .BorderStyle(new Style(Color.White)));
 
             AnsiConsole.MarkupLine($"[yellow]SD Card: {device.Device?.Name}[/]\n");
+            AnsiConsole.MarkupLine($"[grey]Backups stored in: {FileManager.BackupFolder}[/]");
             // 
 
-            var promptItems = new List<(string Name, string Id)>();
-            promptItems.AddRange([
-                ("Backup SD Card", "backup"),
-                ("Restore SD Card", "restore"),
-                ("Delete Backup", "delete"),
-                ("Format SD Card", "format"),
-                (" ", "spacer"),
-                ("Return to Main Menu", "back")
-            ]);
+            var promptItems = new List<(string Name, Func<Task> Id)>()
+            {
+                ("Backup SD Card", fileManager.BackupMedia),
+                ("Restore SD Card", fileManager.RestoreMedia),
+                ("Delete Backup", fileManager.DeleteBackup),
+                ("Format SD Card", device.Format),
+                ("Return to Main Menu", () => { running = false; return Task.CompletedTask; })
+            };
 
-            var prompt = new SelectionPrompt<(string Name, string Id)>()
+            var prompt = new SelectionPrompt<(string Name, Func<Task> Id)>()
                 .PageSize(10)
                 .UseConverter(item => item.Name)
                 .AddChoices(promptItems);
 
             var selectedItem = AnsiConsole.Prompt(prompt);
-
-            // Exit the loop and program if "Exit" is selected
-            if (selectedItem.Id == "back") break;
-
-            // Ignore selections of spacers
-            if (selectedItem.Id == "spacer") continue;
-
-            HandleSelection(selectedItem.Id);
-        }
-    }
-
-    private void HandleSelection(string selectionId)
-    {
-        switch (selectionId)
-        {
-            case "backup":
-                fileManager.BackupMedia();
-                AnsiConsole.MarkupLine("[bold green]Backup complete![/]");
-                Thread.Sleep(2000);
-                break;
-            case "restore":
-                fileManager.RestoreMedia();
-                AnsiConsole.MarkupLine("[bold green]Restore complete![/]");
-                Thread.Sleep(2000);
-                break;
-            case "delete":
-                fileManager.DeleteBackup();
-                break;
-            case "format":
-                device.Format();
-                AnsiConsole.MarkupLine("[bold green]SD Card formatted![/]");
-                Thread.Sleep(2000);
-                break;
+            try
+            {
+                await selectedItem.Id.Invoke();
+                if (running)
+                {
+                    AnsiConsole.MarkupLine("\n[green]Operation completed successfully! Press any key to continue...[/]");
+                    Console.ReadKey(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.WriteException(ex);
+                Console.ReadKey(true);
+            }
         }
     }
 }

@@ -1,14 +1,15 @@
 ﻿using System.Security.Principal;
 using SDMU.Menus;
+using SDMU.NewFramework;
+using SDMU.Utilities;
 
 namespace SDMU;
 
 // Todo: would be a good idea to not use sudo / admin
 public static class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
-        var menu = new MainMenu();
         var os = Environment.OSVersion.Platform;
         switch (os)
         {
@@ -48,7 +49,18 @@ public static class Program
                 Environment.Exit(1);
                 break;
         }
-
-        menu.Show();
+        
+        
+        var mediaDevice = new MediaDevice();
+        var fileManager = new FileManager(mediaDevice);
+        var downloader = new Downloader(new HttpClient(),  mediaDevice);
+        var appType = new AppTypes(downloader);
+        var updater = new Updater(mediaDevice, downloader);
+        var hbManager = new HbManager(mediaDevice,  fileManager, downloader,  appType);
+        var appMenu = new AppMenu(mediaDevice, downloader, appType, updater);
+        var sdMenu = new SdMenu(fileManager, mediaDevice);
+        var menu = new MainMenu(mediaDevice, fileManager, downloader, hbManager, appMenu, sdMenu);
+        
+        await menu.Show();
     }
 }

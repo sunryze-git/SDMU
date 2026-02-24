@@ -1,6 +1,7 @@
 ﻿using SDMU.Utilities;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Spectre.Console;
 
 namespace SDMU.NewFramework;
 
@@ -56,6 +57,8 @@ internal class Package
 
     [JsonPropertyName("md5")]
     public string? Md5 { get; set; }
+    
+    public string LocalPath { get; set; } = string.Empty;
 }
 
 internal class RootObject
@@ -63,7 +66,6 @@ internal class RootObject
     [JsonPropertyName("packages")]
     public IEnumerable<Package>? Packages { get; set; }
 }
-
 
 internal class Downloader(HttpClient client, MediaDevice mediaDevice)
 {
@@ -73,56 +75,75 @@ internal class Downloader(HttpClient client, MediaDevice mediaDevice)
     private const string AromaPaylodsUrl = "https://aroma.foryour.cafe/api/download?packages=environmentloader,wiiu-nanddumper-payload";
     private const string AromaBaseUrl = "https://github.com/wiiu-env/Aroma/releases/download/beta-16/aroma-beta-16.zip";
 
-    private void WriteMetadata(Package package)
+    private readonly Dictionary<string, Package> _packageCache = new(StringComparer.OrdinalIgnoreCase);
+    
+    private static readonly JsonSerializerOptions SerializerOptions = new()
     {
-        var json = JsonSerializer.Serialize(package);
-        var targetDrive = mediaDevice.Device.Name;
-        var metadataPath = Path.Join(targetDrive, "metadata");
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower, // Or whatever the repo uses
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    
+    private async Task WriteMetadata(Package package)
+    {
+        var json = JsonSerializer.Serialize(package, SerializerOptions);
+        var metadataPath = Path.Combine(mediaDevice.Device.Name, "metadata");
 
         // Create path if not exist
         if (!Directory.Exists(metadataPath)) Directory.CreateDirectory(metadataPath);
 
-        var outFile = Path.Join(metadataPath, $"{package.Name}.zip");
-        File.WriteAllText(outFile, json);
+        var outFile = Path.Combine(metadataPath, $"{package.Name}.json");
+        await File.WriteAllTextAsync(outFile, json);
     }
 
-    internal async Task<Package[]> GetPackages(string? category = null)
+    internal async Task<IEnumerable<Package>> GetPackages(string? category = null)
     {
-        var json = await client.GetStringAsync(Repo);
-        var root = JsonSerializer.Deserialize<RootObject>(json);
-        if (root is null)
+        if (_packageCache.Count == 0)
         {
-            throw new Exception("Failed to get packages!");
+            var json = await client.GetStringAsync(Repo);
+            var root = JsonSerializer.Deserialize<RootObject>(json, SerializerOptions);
+
+            if (root?.Packages != null)
+            {
+                foreach (var p in root.Packages)
+                {
+                    if (!string.IsNullOrEmpty(p.Name))
+                        _packageCache[p.Name] = p;
+                }
+            }
         }
-        if (root.Packages is null)
+
+        if (category == null)
         {
-            throw new Exception("No packages found!");
+            return _packageCache.Values;
         }
-        if (category is not null)
-        {
-            return root.Packages
-                .Where(x => string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-        }
-        return root.Packages.ToArray();
+
+        return _packageCache.Values.Where(x => 
+            string.Equals(x.Category, category, StringComparison.OrdinalIgnoreCase));
     }
 
     internal async Task DownloadPackage(string packageName)
     {
-        var packages = await GetPackages();
-        var package = packages
-            .FirstOrDefault(x => string.Equals(x.Name, packageName, StringComparison.OrdinalIgnoreCase));
+        await GetPackages(); // Ensures cache is ready
 
-        if (package is null)
+        // O(1) Lookup - This is the "Speed Hack"
+        if (!_packageCache.TryGetValue(packageName, out var package))
         {
-            throw new Exception("Package not found!");
+            throw new Exception($"Package '{packageName}' not found in the repository!");
         }
-        
-        var packageDownloadPath = Path.Join(Path.GetTempPath(), $"{package.Name}.zip");
-        await DownloadFile(new Uri($"{DlRepo}{package.Name}.zip"), packageDownloadPath);
-        FileManager.ExtractZip(packageDownloadPath, mediaDevice.Device.Name);
 
-        WriteMetadata(package);
+        var tempZipPath = Path.Combine(Path.GetTempPath(), $"{package.Name}_{Guid.NewGuid()}.zip");
+        
+        try 
+        {
+            await DownloadFile(new Uri($"{DlRepo}{package.Name}.zip"), tempZipPath);
+            await FileManager.ExtractZipAsync(tempZipPath, mediaDevice.Device.Name);
+            await WriteMetadata(package);
+        }
+        finally 
+        {
+            if (File.Exists(tempZipPath)) File.Delete(tempZipPath);
+        }
     }
 
     internal async Task DownloadAroma()
@@ -136,29 +157,29 @@ internal class Downloader(HttpClient client, MediaDevice mediaDevice)
         await DownloadFileAndExtract(new Uri(TiramisuDl), mediaDevice.Device.Name);
     }
 
-    private async Task<string> DownloadFile(Uri uri, string outputPath)
+    private async Task DownloadFile(Uri uri, string fullPath)
     {
-        var fileName = Path.GetFileName(uri.LocalPath);
-        var filePath = Path.Join(outputPath, fileName);
-        try
-        {
-            var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-            await using FileStream outStream = new(filePath, FileMode.Create);
-            await response.Content.CopyToAsync(outStream);
-        }
-        catch (HttpRequestException e)
-        {
-            Console.WriteLine($"Failed to download file: {e.Message}");
-        }
-        
-        return filePath;
+        using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        await using var outStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+        await response.Content.CopyToAsync(outStream);
     }
     
-    private async Task DownloadFileAndExtract(Uri uri, string outputPath)
+    private async Task DownloadFileAndExtract(Uri uri, string extractPath)
     {
-        var outputFile = await DownloadFile(uri, outputPath);
-        FileManager.ExtractZip(outputFile, mediaDevice.Device.Name);
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
+        try 
+        {
+            await DownloadFile(uri, tempFile);
+            await FileManager.ExtractZipAsync(tempFile, extractPath);
+        }
+        finally 
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
 }

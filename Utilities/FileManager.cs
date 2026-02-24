@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+﻿using System.Buffers;
+using System.IO.Compression;
 using SDMU.NewFramework;
 using Spectre.Console;
 
@@ -6,79 +7,124 @@ namespace SDMU.Utilities;
 
 internal class FileManager(MediaDevice mediaDevice)
 {
-    internal readonly string BackupFolder =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SDMU_Backup");
+    internal static string BackupFolder => GetBackupPath();
 
-    internal static void ExtractZip(string zipPath, string extractPath)
+    private static string GetBackupPath()
+    {
+        string baseDirectory;
+
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            // Check if we are running under sudo
+            var sudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
+
+            // Path is /home/username
+            baseDirectory = !string.IsNullOrEmpty(sudoUser) ? $"/home/{sudoUser}" : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        }
+        else // Windows
+        {
+            baseDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        }
+
+        // Fallback if somehow still empty
+        if (string.IsNullOrWhiteSpace(baseDirectory))
+            baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+        // We can explicitly add "Documents" for Linux/macOS to keep it clean
+        var finalPath = OperatingSystem.IsWindows() 
+            ? Path.Combine(baseDirectory, "SDMU_Backup")
+            : Path.Combine(baseDirectory, "Documents", "SDMU_Backup");
+
+        return finalPath;
+    }
+
+    internal static async Task ExtractZipAsync(string zipPath, string extractPath)
     {
         // Extract the zip file
-        ZipFile.ExtractToDirectory(zipPath, extractPath, true);
+        await ZipFile.ExtractToDirectoryAsync(zipPath, extractPath, true);
         File.Delete(zipPath);
     }
 
-    private static void CopyFiles(string source, string target)
+    private async Task CopyFilesAsync(string source, string target)
     {
-        AnsiConsole.Progress()
-            .Start(ctx =>
+        await AnsiConsole.Progress()
+            .Columns(
+                new TaskDescriptionColumn(),
+                new ProgressBarColumn(),
+                new PercentageColumn(),
+                new TransferSpeedColumn(),
+                new SpinnerColumn())
+            .StartAsync(async ctx =>
             {
-                // Define tasks
-                var fileCopy = ctx.AddTask("[green]Copying Files...[/]");
-
-                // Copy files
-                var enumerationOptions = new EnumerationOptions
+                var entries = Directory.GetFileSystemEntries(source, "*", new EnumerationOptions
                 {
                     RecurseSubdirectories = true,
                     IgnoreInaccessible = true
-                };
-                var entries = Directory.GetFileSystemEntries(source, "*", enumerationOptions);
-                var createdDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                fileCopy.MaxValue = entries.Length;
-                foreach (var item in entries)
+                });
+
+                var totalSize = entries
+                    .Where(e => !Directory.Exists(e))
+                    .Select(e => new FileInfo(e).Length)
+                    .Sum();
+                
+                var mainTask = ctx.AddTask("Copying Files", maxValue: totalSize);
+                
+                var buffer = ArrayPool<byte>.Shared.Rent(81920); // 80 KB buffer
+                try
                 {
-                    try
+                    foreach (var item in entries)
                     {
                         var relativePath = Path.GetRelativePath(source, item);
                         var destinationPath = Path.Combine(target, relativePath);
-                        var fileAttributes = File.GetAttributes(item);
 
-                        // This is a directory 
-                        if (fileAttributes.HasFlag(FileAttributes.Directory))
+                        if (Directory.Exists(item))
                         {
                             Directory.CreateDirectory(destinationPath);
-                            createdDirectories.Add(destinationPath);
+                            continue;
                         }
-                        else // not a directory
-                        {
-                            var parentFolder = Path.GetDirectoryName(destinationPath);
-                            if (parentFolder is not null && createdDirectories.Add(parentFolder))
-                                Directory.CreateDirectory(parentFolder);
-                            File.Copy(item, destinationPath, true);
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // idk
-                    }
 
-                    fileCopy.Increment(1);
+                        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+                        await using var sourceStream = new FileStream(item, FileMode.Open, FileAccess.Read,
+                            FileShare.Read, 4096, true);
+                        await using var destStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write,
+                            FileShare.None, 4096, true);
+
+                        int bytesRead;
+                        while ((bytesRead = await sourceStream.ReadAsync(buffer.AsMemory(0, buffer.Length))) > 0)
+                        {
+                            // Use ReadOnlyMemory<byte> overload
+                            await destStream.WriteAsync(buffer.AsMemory(0, bytesRead));
+
+                            mainTask.Increment(bytesRead);
+                        }
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
                 }
             });
     }
 
-    internal void BackupMedia()
+    internal async Task BackupMedia()
     {
-        // Name is current date and time
         var backupTime = DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss");
-        var backupName = Path.Combine(mediaDevice.Device.Name, backupTime);
-        var targetDir = Path.Combine(BackupFolder, backupName);
+    
+        // Combine directly: BackupFolder + TimeStamp
+        var targetDir = Path.Combine(BackupFolder, backupTime);
+    
+        // Ensure the specific timestamp folder is created
+        Directory.CreateDirectory(targetDir);
 
-        CopyFiles(mediaDevice.Device.Name, targetDir);
+        await CopyFilesAsync(mediaDevice.Device.Name, targetDir);
     }
 
-    internal void RestoreMedia()
+    internal async Task RestoreMedia()
     {
         var backupFolders = Directory.GetDirectories(BackupFolder);
-
+        if (backupFolders.Length == 0) throw new Exception("No backups found.");
+        
         // Ask user to select a backup to restore
         var selectedBackup = AnsiConsole.Prompt(new SelectionPrompt<string>()
             .Title("[yellow]Select a backup to restore:[/]")
@@ -86,15 +132,17 @@ internal class FileManager(MediaDevice mediaDevice)
             .AddChoices(backupFolders));
 
         // Format SD Card
-        mediaDevice.Format();
+        await mediaDevice.Format();
 
         // Copy files from backup to SD Card
-        CopyFiles(selectedBackup, mediaDevice.Device.Name);
+        await CopyFilesAsync(selectedBackup, mediaDevice.Device.Name);
     }
 
-    internal void DeleteBackup()
+    internal async Task DeleteBackup()
     {
         var backupFolders = Directory.GetDirectories(BackupFolder);
+        if (backupFolders.Length == 0) return;
+        
         var prompt = new SelectionPrompt<string>()
             .Title("[yellow]Select a backup to delete:[/]")
             .PageSize(10)
@@ -103,15 +151,15 @@ internal class FileManager(MediaDevice mediaDevice)
         var selectedBackup = AnsiConsole.Prompt(prompt);
         try
         {
-            Directory.Delete(selectedBackup, true);
-            AnsiConsole.MarkupLine("[bold green]Backup deleted![/]");
+            // Directory.Delete is sync, offload to background for responsiveness
+            await Task.Run(() => Directory.Delete(selectedBackup, true));
+            AnsiConsole.MarkupLine("[bold green]✔ Backup deleted![/]");
         }
-        catch (Exception exception)
+        catch (Exception ex)
         {
-            AnsiConsole.MarkupLine("[red]Failed to delete backup![/]");
-            AnsiConsole.WriteException(exception);
+            AnsiConsole.MarkupLine($"[red]Failed to delete backup: {ex.Message}[/]");
         }
 
-        Thread.Sleep(2000);
+        await Task.Delay(2000);
     }
 }
